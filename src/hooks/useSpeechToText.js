@@ -5,6 +5,7 @@ export function useSpeechToText() {
   const [isListening, setIsListening] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [audioUrl, setAudioUrl] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
   const [error, setError] = useState(null);
   const [isSupported, setIsSupported] = useState(true);
   const [isBraveOrOffline, setIsBraveOrOffline] = useState(false);
@@ -92,6 +93,7 @@ export function useSpeechToText() {
               const blob = new Blob(audioChunksRef.current, {
                 type: "audio/webm",
               });
+              setAudioBlob(blob);
               const url = URL.createObjectURL(blob);
               setAudioUrl(url);
             }
@@ -203,6 +205,7 @@ export function useSpeechToText() {
   const resetTranscript = useCallback(() => {
     setTranscript("");
     setAudioUrl(null);
+    setAudioBlob(null);
     setError(null);
   }, []);
 
@@ -218,6 +221,7 @@ export function useSpeechToText() {
     isListening,
     audioLevel,
     audioUrl,
+    audioBlob,
     error,
     isSupported,
     isBraveOrOffline,
