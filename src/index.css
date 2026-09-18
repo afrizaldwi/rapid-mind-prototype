@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+:root {
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-danger: #dc2626;
+  --color-warning: #f59e0b;
+  --color-success: #16a34a;
+  --color-zona-merah: #dc2626;
+  --color-zona-kuning: #f59e0b;
+  --color-zona-hijau: #16a34a;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
