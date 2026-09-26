@@ -15,6 +15,7 @@ import RegisterPage from './pages/RegisterPage'
 // Relawan Pages
 import HomePage from './pages/relawan/HomePage'
 import PatientLookupPage from './pages/relawan/PatientLookupPage'
+import PfaPage from './pages/relawan/PfaPage'
 import TriagePage from './pages/relawan/TriagePage'
 import VerbalPage from './pages/relawan/VerbalPage'
 import NonVerbalPage from './pages/relawan/NonVerbalPage'
@@ -49,6 +50,7 @@ function App() {
           <Route index element={<HomePage />} />
           <Route path="patient-lookup" element={<PatientLookupPage />} />
           <Route element={<AssessmentRoute />}>
+            <Route path="pfa" element={<PfaPage />} />
             <Route path="triage" element={<TriagePage />} />
             <Route path="triage/verbal" element={<VerbalPage />} />
             <Route path="triage/nonverbal" element={<NonVerbalPage />} />

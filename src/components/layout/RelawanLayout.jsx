@@ -15,6 +15,7 @@ export default function RelawanLayout() {
   const navigate = useNavigate();
   const [showSyncToast, setShowSyncToast] = useState(false);
   const isAssessmentPath = location.pathname === '/relawan/patient-lookup' ||
+                           location.pathname === '/relawan/pfa' ||
                            location.pathname === '/relawan/triage' ||
                            location.pathname.startsWith('/relawan/triage/');
   
@@ -22,6 +23,7 @@ export default function RelawanLayout() {
   const hideBottomNav = location.pathname.includes('/triage/verbal') || 
                         location.pathname.includes('/triage/nonverbal') || 
                         location.pathname.includes('/triage/result') ||
+                        location.pathname === '/relawan/pfa' ||
                         location.pathname.includes('/patient-lookup');
 
   useEffect(() => {
