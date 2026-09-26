@@ -1,0 +1,542 @@
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  Search,
+  UserPlus,
+  History,
+  CreditCard,
+  User,
+  Calendar,
+  Users,
+  Zap,
+  ChevronRight,
+  AlertCircle,
+} from "lucide-react";
+import { useAuth } from "../../hooks/useAuth";
+import { localDb } from "../../lib/db";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "../../lib/firebase";
+
+// ───────────────────────────────────────────────
+// Demo quick-fill patient presets (easy to swap later)
+// ───────────────────────────────────────────────
+const DEMO_PATIENTS = {
+  new: {
+    nik: "3201234567890001",
+    nama: "Siti Aminah",
+    usia: "34",
+    jenisKelamin: "P",
+  },
+  existing: {
+    nik: "3201234567890002",
+    nama: "Budi Santoso",
+    usia: "45",
+    jenisKelamin: "L",
+  },
+};
+
+export default function PatientLookupPage() {
+  const navigate = useNavigate();
+  const { user, userProfile } = useAuth();
+
+  const [nik, setNik] = useState("");
+  const [nama, setNama] = useState("");
+  const [usia, setUsia] = useState("");
+  const [jenisKelamin, setJenisKelamin] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [lookupResult, setLookupResult] = useState(null); // null | { found: boolean, patient?, history? }
+  const [error, setError] = useState("");
+
+  // ──────────── NIK validation ────────────
+  const isNikValid = /^\d{16}$/.test(nik);
+  const isFormComplete = isNikValid && nama.trim() && usia.trim() && jenisKelamin;
+
+  // ──────────── Auto-Lookup Logic ────────────
+  const handleLookup = async () => {
+    if (!isNikValid) {
+      setError("NIK harus 16 digit angka.");
+      return;
+    }
+    setError("");
+    setIsSearching(true);
+    setLookupResult(null);
+
+    try {
+      // 1. Check local IndexedDB first
+      const localPatient = await localDb.patients
+        .where("nik")
+        .equals(nik)
+        .first();
+
+      if (localPatient) {
+        // Fetch local case history for this patient
+        const localCases = await localDb.cases
+          .where("patientNik")
+          .equals(nik)
+          .reverse()
+          .sortBy("timestamp");
+
+        setLookupResult({
+          found: true,
+          patient: localPatient,
+          history: localCases,
+          source: "local",
+        });
+
+        // Auto-fill form from stored data
+        setNama(localPatient.nama || nama);
+        setUsia(localPatient.usia?.toString() || usia);
+        setJenisKelamin(localPatient.jenisKelamin || jenisKelamin);
+        setIsSearching(false);
+        return;
+      }
+
+      // 2. Check Firestore if online
+      if (navigator.onLine) {
+        const patientsRef = collection(db, "patients");
+        const q = query(patientsRef, where("nik", "==", nik));
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+          const patientDoc = snapshot.docs[0];
+          const patientData = { id: patientDoc.id, ...patientDoc.data() };
+
+          // Also check Firestore cases for this patient
+          const casesRef = collection(db, "cases");
+          const casesQuery = query(casesRef, where("patientNik", "==", nik));
+          const casesSnapshot = await getDocs(casesQuery);
+          const firestoreCases = casesSnapshot.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }));
+
+          setLookupResult({
+            found: true,
+            patient: patientData,
+            history: firestoreCases,
+            source: "firestore",
+          });
+
+          // Auto-fill form from stored data
+          setNama(patientData.nama || nama);
+          setUsia(patientData.usia?.toString() || usia);
+          setJenisKelamin(patientData.jenisKelamin || jenisKelamin);
+          setIsSearching(false);
+          return;
+        }
+      }
+
+      // 3. Not found anywhere
+      setLookupResult({ found: false });
+    } catch (err) {
+      console.error("Lookup error:", err);
+      setError("Gagal melakukan pencarian. Coba lagi.");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // ──────────── Register new patient & navigate ────────────
+  const handleRegisterAndProceed = async () => {
+    if (!isFormComplete) return;
+
+    const patientData = {
+      nik,
+      nama: nama.trim(),
+      usia: parseInt(usia, 10),
+      jenisKelamin,
+      poskoName: userProfile?.poskoName || "Posko Utama - Kota",
+      registeredAt: new Date().toISOString(),
+      lastPhase: "akut",
+      pfaCompleted: false,
+      registeredBy: user?.uid,
+    };
+
+    try {
+      // Save locally
+      await localDb.patients.add(patientData);
+
+      // Save to Firestore if online
+      if (navigator.onLine) {
+        try {
+          await addDoc(collection(db, "patients"), {
+            ...patientData,
+            createdAt: serverTimestamp(),
+          });
+        } catch {
+          // Firestore save failed — local is fine, will sync later
+        }
+      }
+
+      // Navigate to PFA wizard (Screen 3) for new patients
+      // Falls back to triage page until PFA is built
+      navigate("/relawan/triage", {
+        state: {
+          patient: patientData,
+          phase: "akut",
+          isNewPatient: true,
+        },
+      });
+    } catch (err) {
+      console.error("Registration error:", err);
+      setError("Gagal menyimpan data pasien.");
+    }
+  };
+
+  // ──────────── Navigate to SRQ-20 for returning patients ────────────
+  const handleProceedExisting = () => {
+    if (!lookupResult?.patient) return;
+
+    const patient = lookupResult.patient;
+
+    // Navigate to SRQ-20 / triage for existing patients
+    // Falls back to triage page until SRQ-20 is built
+    navigate("/relawan/triage", {
+      state: {
+        patient: {
+          nik: patient.nik,
+          nama: patient.nama,
+          usia: patient.usia,
+          jenisKelamin: patient.jenisKelamin,
+          poskoName: patient.poskoName,
+        },
+        phase: "lanjutan",
+        isNewPatient: false,
+        previousHistory: lookupResult.history,
+      },
+    });
+  };
+
+  // ──────────── Demo quick-fill ────────────
+  const fillDemo = (type) => {
+    const preset = DEMO_PATIENTS[type];
+    setNik(preset.nik);
+    setNama(preset.nama);
+    setUsia(preset.usia);
+    setJenisKelamin(preset.jenisKelamin);
+    setLookupResult(null);
+    setError("");
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24">
+      {/* Header */}
+      <div className="bg-white px-4 py-4 flex items-center gap-3 shadow-sm sticky top-0 z-10">
+        <button
+          onClick={() => navigate("/relawan")}
+          className="p-1 -ml-1 text-gray-600 hover:text-gray-800"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <h1 className="text-lg font-bold text-gray-800">
+          Identitas Penyintas
+        </h1>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {/* Quick Demo Buttons */}
+        <div className="bg-slate-100 rounded-xl p-3">
+          <p className="text-xs text-slate-500 font-medium mb-2">
+            ⚡ Simulasi Cepat (Demo)
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => fillDemo("new")}
+              className="flex-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold py-2 px-3 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center gap-1"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              Pasien Baru
+            </button>
+            <button
+              onClick={() => fillDemo("existing")}
+              className="flex-1 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold py-2 px-3 rounded-lg hover:bg-amber-100 transition-colors flex items-center justify-center gap-1"
+            >
+              <History className="w-3.5 h-3.5" />
+              Pasien Lama
+            </button>
+          </div>
+        </div>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+
+        {/* NIK Input + Lookup */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
+          <label className="block text-sm font-bold text-gray-700 mb-2">
+            <CreditCard className="w-4 h-4 inline mr-1.5 -mt-0.5 text-gray-400" />
+            Nomor Induk Kependudukan (NIK)
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={16}
+              value={nik}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, "").slice(0, 16);
+                setNik(val);
+                setLookupResult(null);
+              }}
+              placeholder="Masukkan 16 digit NIK"
+              className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono tracking-wider"
+            />
+            <button
+              onClick={handleLookup}
+              disabled={!isNikValid || isSearching}
+              className="bg-blue-600 text-white px-4 py-2.5 rounded-lg disabled:bg-gray-300 transition-colors flex items-center gap-1.5 text-sm font-bold"
+            >
+              {isSearching ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
+              Cari
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-1.5">
+            {nik.length}/16 digit
+            {nik.length > 0 && nik.length < 16 && (
+              <span className="text-amber-500"> — belum lengkap</span>
+            )}
+            {isNikValid && (
+              <span className="text-green-600"> — ✓ format valid</span>
+            )}
+          </p>
+        </div>
+
+        {/* Lookup Result: Patient Found */}
+        {lookupResult?.found && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3 animate-fade-in">
+            <div className="flex items-start gap-3">
+              <div className="bg-amber-100 p-2 rounded-full">
+                <History className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-amber-800 text-sm">
+                  Penyintas Ditemukan
+                </h3>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  NIK sudah terdaftar. Riwayat PFA tersedia.
+                </p>
+              </div>
+            </div>
+
+            {/* Patient Info Card */}
+            <div className="bg-white rounded-xl p-3 border border-amber-100">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-gray-400 text-xs">Nama</span>
+                  <p className="font-medium text-gray-800">
+                    {lookupResult.patient.nama}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-xs">Usia</span>
+                  <p className="font-medium text-gray-800">
+                    {lookupResult.patient.usia} tahun
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-xs">Jenis Kelamin</span>
+                  <p className="font-medium text-gray-800">
+                    {lookupResult.patient.jenisKelamin === "L"
+                      ? "Laki-laki"
+                      : "Perempuan"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-xs">Posko</span>
+                  <p className="font-medium text-gray-800">
+                    {lookupResult.patient.poskoName}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* History Summary */}
+            {lookupResult.history && lookupResult.history.length > 0 && (
+              <div className="bg-white rounded-xl p-3 border border-amber-100">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  Riwayat Asesmen ({lookupResult.history.length} catatan)
+                </p>
+                <div className="space-y-1.5">
+                  {lookupResult.history.slice(0, 3).map((h, i) => (
+                    <div
+                      key={h.id || h.localId || i}
+                      className="flex items-center justify-between text-xs"
+                    >
+                      <span className="text-gray-600">
+                        {h.timestamp
+                          ? new Intl.DateTimeFormat("id-ID", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            }).format(
+                              new Date(
+                                h.timestamp?.toDate?.() || h.timestamp,
+                              ),
+                            )
+                          : "—"}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full font-bold ${
+                          (h.tier || h.zona) === "T0" || h.zona === "merah"
+                            ? "bg-red-100 text-red-700"
+                            : (h.tier || h.zona) === "T1"
+                              ? "bg-red-100 text-red-600"
+                              : (h.tier || h.zona) === "T2" ||
+                                  h.zona === "kuning"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-green-100 text-green-700"
+                        }`}
+                      >
+                        {h.tier || `Zona ${h.zona}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action: Proceed to SRQ-20 */}
+            <button
+              onClick={handleProceedExisting}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
+            >
+              Lanjutkan ke Wawancara SRQ-20
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
+        {/* Lookup Result: Patient Not Found → Show Registration Form */}
+        {lookupResult && !lookupResult.found && (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3 animate-fade-in">
+            <div className="flex items-start gap-3">
+              <div className="bg-blue-100 p-2 rounded-full">
+                <UserPlus className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-blue-800 text-sm">
+                  Penyintas Baru
+                </h3>
+                <p className="text-xs text-blue-600 mt-0.5">
+                  NIK belum terdaftar. Lengkapi data penyintas di bawah untuk
+                  memulai PFA (Fase Akut Hari 1–3).
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Registration Form — shown after lookup returns not found, or always visible for data entry */}
+        {lookupResult !== null && !lookupResult.found && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 space-y-4">
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider border-b border-gray-100 pb-2">
+              Data Penyintas
+            </h3>
+
+            {/* Nama */}
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                <User className="w-4 h-4 inline mr-1 -mt-0.5 text-gray-400" />
+                Nama Lengkap
+              </label>
+              <input
+                type="text"
+                value={nama}
+                onChange={(e) => setNama(e.target.value)}
+                placeholder="Nama lengkap penyintas"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+            </div>
+
+            {/* Usia & Jenis Kelamin */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                  <Calendar className="w-4 h-4 inline mr-1 -mt-0.5 text-gray-400" />
+                  Usia
+                </label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="120"
+                  value={usia}
+                  onChange={(e) => setUsia(e.target.value)}
+                  placeholder="Tahun"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                  <Users className="w-4 h-4 inline mr-1 -mt-0.5 text-gray-400" />
+                  Jenis Kelamin
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setJenisKelamin("L")}
+                    className={`py-2.5 rounded-lg text-sm font-bold border transition-all ${
+                      jenisKelamin === "L"
+                        ? "bg-blue-50 border-blue-500 text-blue-700 ring-2 ring-blue-500/20"
+                        : "border-gray-200 text-gray-500 hover:border-gray-300"
+                    }`}
+                  >
+                    L
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setJenisKelamin("P")}
+                    className={`py-2.5 rounded-lg text-sm font-bold border transition-all ${
+                      jenisKelamin === "P"
+                        ? "bg-pink-50 border-pink-500 text-pink-700 ring-2 ring-pink-500/20"
+                        : "border-gray-200 text-gray-500 hover:border-gray-300"
+                    }`}
+                  >
+                    P
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Fixed Bottom Action — Register & Start PFA */}
+      {lookupResult !== null && !lookupResult.found && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
+          <div className="max-w-md mx-auto">
+            <button
+              onClick={handleRegisterAndProceed}
+              disabled={!isFormComplete}
+              className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl disabled:bg-gray-300 transition-colors shadow-sm flex items-center justify-center gap-2"
+            >
+              <Zap className="w-5 h-5" />
+              Daftarkan & Mulai PFA
+            </button>
+            {!isFormComplete && (
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Lengkapi semua data di atas untuk melanjutkan
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

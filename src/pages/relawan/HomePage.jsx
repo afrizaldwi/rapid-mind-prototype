@@ -103,7 +103,7 @@ export default function HomePage() {
 
       {/* Quick Action */}
       <Link
-        to="/relawan/triage"
+        to="/relawan/patient-lookup"
         className="block w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl p-6 shadow-md shadow-blue-200 transition-transform active:scale-[0.98]"
       >
         <div className="flex flex-col items-center justify-center gap-3">

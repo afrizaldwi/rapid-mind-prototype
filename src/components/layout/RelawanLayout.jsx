@@ -16,7 +16,8 @@ export default function RelawanLayout() {
   // Determine if bottom nav should be hidden (on triage sub-pages that have their own action buttons)
   const hideBottomNav = location.pathname.includes('/triage/verbal') || 
                         location.pathname.includes('/triage/nonverbal') || 
-                        location.pathname.includes('/triage/result');
+                        location.pathname.includes('/triage/result') ||
+                        location.pathname.includes('/patient-lookup');
 
   useEffect(() => {
     if (prevOffline && !isOffline && pendingCount === 0) {
