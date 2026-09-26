@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mic, ClipboardCheck, ArrowLeft } from 'lucide-react';
+import { useAssessment } from '../../hooks/useAssessment';
 
 export default function TriagePage() {
   const navigate = useNavigate();
+  const { patient } = useAssessment();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -14,7 +16,10 @@ export default function TriagePage() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-lg font-bold text-gray-800">Pilih Metode Triase</h1>
+        <div>
+          <h1 className="text-lg font-bold text-gray-800">Pilih Metode Triase</h1>
+          <p className="text-xs text-gray-500">{patient.nama}</p>
+        </div>
       </div>
 
       <div className="p-4 space-y-4 mt-2">

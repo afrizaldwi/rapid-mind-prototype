@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, AlertCircle } from 'lucide-react';
 import { analyzeChecklist } from '../../lib/scoring';
-import clsx from 'clsx';
+import { useAssessment } from '../../hooks/useAssessment';
 import { twMerge } from 'tailwind-merge';
 
 const questions = [
@@ -18,6 +18,7 @@ const questions = [
 
 export default function NonVerbalPage() {
   const navigate = useNavigate();
+  const { assessment, patient } = useAssessment();
   const [answers, setAnswers] = useState(
     questions.reduce((acc, q) => ({ ...acc, [q.id]: false }), {})
   );
@@ -32,7 +33,8 @@ export default function NonVerbalPage() {
       state: {
         ...result,
         checklistAnswers: answers,
-        jalur: 'nonverbal'
+        jalur: 'nonverbal',
+        assessmentStartedAt: assessment.startedAt
       }
     });
   };
@@ -45,7 +47,10 @@ export default function NonVerbalPage() {
         <button onClick={() => navigate('/relawan/triage')} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-lg font-bold text-gray-800">Jalur B — Checklist Observasi</h1>
+        <div>
+          <h1 className="text-lg font-bold text-gray-800">Jalur B — Checklist Observasi</h1>
+          <p className="text-xs text-gray-500">{patient.nama}</p>
+        </div>
       </div>
 
       <div className="p-4 space-y-3">

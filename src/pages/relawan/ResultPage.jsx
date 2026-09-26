@@ -3,14 +3,24 @@ import { useLocation, useNavigate, Navigate } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Save, X, Info } from "lucide-react";
 import { saveCase } from "../../lib/sync";
 import { useAuth } from "../../hooks/useAuth";
-import clsx from "clsx";
+import { useAssessment } from "../../hooks/useAssessment";
 import { twMerge } from "tailwind-merge";
 
 export default function ResultPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, userProfile } = useAuth();
+  const { assessment, patient } = useAssessment();
   const state = location.state;
+  const hasResult = state &&
+    state.assessmentStartedAt === assessment.startedAt &&
+    ["merah", "kuning", "hijau"].includes(state.zona) &&
+    typeof state.score === "number" &&
+    (state.jalur === "verbal"
+      ? typeof state.transcript === "string" && !!state.transcript.trim()
+      : state.jalur === "nonverbal" && state.checklistAnswers &&
+        typeof state.checklistAnswers === "object" &&
+        Object.values(state.checklistAnswers).some(Boolean));
 
   const [showPfaModal, setShowPfaModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -21,7 +31,7 @@ export default function ResultPage() {
     }
   }, [state]);
 
-  if (!state) {
+  if (!hasResult) {
     return <Navigate to="/relawan/triage" replace />;
   }
 
@@ -33,6 +43,7 @@ export default function ResultPage() {
     criticalItems,
     warningItems,
     score,
+    checklistAnswers,
   } = state;
 
   const handleSave = async () => {
@@ -41,11 +52,19 @@ export default function ResultPage() {
     try {
       const baseLat = userProfile?.poskoLat || -6.2088;
       const baseLng = userProfile?.poskoLng || 106.8456;
+      const resultData = jalur === "verbal"
+        ? { zona, jalur, transcript, detectedKeywords, score }
+        : { zona, jalur, criticalItems, warningItems, score, checklistAnswers };
       const caseData = {
-        ...state,
+        ...resultData,
+        patientNik: patient.nik,
+        patientName: patient.nama,
+        patientAge: patient.usia,
+        patientGender: patient.jenisKelamin,
+        phase: assessment.phase,
         relawanId: user?.uid,
         relawanName: userProfile?.name || "Relawan",
-        poskoName: userProfile?.poskoName || "Posko Utama - Kota",
+        poskoName: patient.poskoName || userProfile?.poskoName || "Posko Utama - Kota",
         poskoLat: baseLat,
         poskoLng: baseLng,
         // Add random slight variation to posko coords to prevent exact overlapping pins on map
@@ -54,7 +73,10 @@ export default function ResultPage() {
       };
 
       await saveCase(caseData);
-      navigate("/relawan");
+      navigate("/relawan", {
+        replace: true,
+        state: { completedAssessmentStartedAt: assessment.startedAt },
+      });
     } catch (error) {
       console.error("Error saving case:", error);
       alert("Gagal menyimpan data.");

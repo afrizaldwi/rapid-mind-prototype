@@ -121,3 +121,16 @@ Sebelum perubahan ini, alur utama relawan langsung diarahkan ke pemilihan metode
 Catatan:
 Dedicated PFA dan SRQ-20 flow belum diimplementasikan pada Track A.1. Integrasi routing berdasarkan fase, propagasi patient context sepanjang asesmen, dan eliminasi jalur yang melewati Screen 2 akan dikerjakan pada Phase 0 dan fase implementasi berikutnya.
 ```
+
+---
+
+## Phase 0A — Assessment Session Integrity (26 September 2026)
+
+- **Entry asesmen wajib melalui Patient Lookup.** Tombol bottom navigation “Triase Baru” menuju `/relawan/patient-lookup`; rute triase legacy tetap tersedia, tetapi seluruhnya dijaga oleh `AssessmentRoute` dan mengarahkan pengguna tanpa asesmen aktif kembali ke Patient Lookup.
+- **Identitas pasien dipertahankan sepanjang asesmen.** `AssessmentProvider` mencakup rute Relawan, termasuk lookup, triase, verbal, non-verbal, dan hasil. Lookup memulai asesmen pasien baru (`akut`) setelah penyimpanan lokal berhasil, atau pasien lama (`lanjutan`) dengan riwayat yang ditemukan. Halaman triase membaca pasien dari context, bukan meneruskan identitas melalui route state.
+- **Pemulihan dalam tab yang sama.** Context menyimpan asesmen aktif bersama UID Relawan pada `sessionStorage` (`rapidMind.activeAssessment`) dan memulihkannya saat halaman dimuat ulang hanya untuk UID Relawan yang sama. Schema Zod terpusat memvalidasi asesmen baru dan data yang dipulihkan; data tanpa pemilik yang cocok, JSON rusak, atau data tidak valid dibuang dengan aman.
+- **Kasus terhubung eksplisit ke pasien.** `ResultPage` menulis `patientNik`, nama, usia, jenis kelamin, dan fase dari context. Data hasil sementara tetap berada pada route state dan diikat ke waktu mulai asesmen agar hasil lama tidak tersimpan untuk pasien yang baru dipilih. Result tanpa payload valid kembali ke pemilihan jalur triase.
+- **Pembersihan sesi.** Setelah `saveCase()` berhasil menulis kasus lokal, navigasi menuju Beranda terjadi lebih dulu; asesmen aktif dan entri `sessionStorage` dihapus saat rute Beranda yang tidak dijaga sudah aktif. Jika penyimpanan lokal gagal, asesmen tetap ada. Logout eksplisit Relawan menghapus asesmen sebelum permintaan logout autentikasi.
+- **Validasi:** `npm run lint` lulus tanpa error (peringatan kode lama masih ada); `npm run build` berhasil. Jalur langsung, lookup baru/lama, refresh, save sukses/gagal, dan logout ditinjau dari rute serta aliran data di source. Interaksi browser dengan akun Firebase tidak dijalankan pada tahap ini.
+
+Pekerjaan Phase 0 lain seperti keunikan NIK dan sinkronisasi pasien offline masih terbuka. PFA dan SRQ-20 khusus belum diimplementasikan.

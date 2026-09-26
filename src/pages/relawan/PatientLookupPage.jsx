@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
+import { useAssessment } from "../../hooks/useAssessment";
 import { localDb } from "../../lib/db";
 import {
   collection,
@@ -46,6 +47,7 @@ const DEMO_PATIENTS = {
 export default function PatientLookupPage() {
   const navigate = useNavigate();
   const { user, userProfile } = useAuth();
+  const { startAssessment } = useAssessment();
 
   const [nik, setNik] = useState("");
   const [nama, setNama] = useState("");
@@ -176,15 +178,9 @@ export default function PatientLookupPage() {
         }
       }
 
-      // Navigate to PFA wizard (Screen 3) for new patients
-      // Falls back to triage page until PFA is built
-      navigate("/relawan/triage", {
-        state: {
-          patient: patientData,
-          phase: "akut",
-          isNewPatient: true,
-        },
-      });
+      startAssessment({ patient: patientData, phase: "akut", isNewPatient: true });
+      // Falls back to triage until the dedicated PFA flow is built.
+      navigate("/relawan/triage");
     } catch (err) {
       console.error("Registration error:", err);
       setError("Gagal menyimpan data pasien.");
@@ -197,22 +193,18 @@ export default function PatientLookupPage() {
 
     const patient = lookupResult.patient;
 
-    // Navigate to SRQ-20 / triage for existing patients
-    // Falls back to triage page until SRQ-20 is built
-    navigate("/relawan/triage", {
-      state: {
-        patient: {
-          nik: patient.nik,
-          nama: patient.nama,
-          usia: patient.usia,
-          jenisKelamin: patient.jenisKelamin,
-          poskoName: patient.poskoName,
-        },
+    try {
+      startAssessment({
+        patient,
         phase: "lanjutan",
-        isNewPatient: false,
-        previousHistory: lookupResult.history,
-      },
-    });
+        previousHistory: lookupResult.history || [],
+      });
+      // Falls back to triage until the dedicated SRQ-20 flow is built.
+      navigate("/relawan/triage");
+    } catch (err) {
+      console.error("Assessment error:", err);
+      setError("Data pasien tidak valid. Cari ulang pasien.");
+    }
   };
 
   // ──────────── Demo quick-fill ────────────

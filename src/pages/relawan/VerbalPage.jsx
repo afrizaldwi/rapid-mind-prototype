@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Mic,
@@ -15,9 +15,11 @@ import {
 import { useSpeechToText } from "../../hooks/useSpeechToText";
 import { useOfflineWhisper } from "../../hooks/useOfflineWhisper";
 import { analyzeTranscript } from "../../lib/scoring";
+import { useAssessment } from "../../hooks/useAssessment";
 
 export default function VerbalPage() {
   const navigate = useNavigate();
+  const { assessment, patient } = useAssessment();
   const {
     isListening,
     transcript,
@@ -76,6 +78,7 @@ export default function VerbalPage() {
           ...result,
           transcript,
           jalur: "verbal",
+          assessmentStartedAt: assessment.startedAt,
         },
       });
     } catch (error) {
@@ -102,6 +105,7 @@ export default function VerbalPage() {
           <h1 className="text-lg font-bold text-gray-800">
             Jalur A — Rekam Suara
           </h1>
+          <span className="text-xs text-gray-500">{patient.nama}</span>
         </div>
         <div className="p-6 flex flex-col items-center justify-center flex-1 text-center">
           <AlertTriangle className="w-12 h-12 text-amber-500 mb-4" />
@@ -133,9 +137,10 @@ export default function VerbalPage() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-lg font-bold text-gray-800">
-          Jalur A — Rekam Suara
-        </h1>
+        <div>
+          <h1 className="text-lg font-bold text-gray-800">Jalur A — Rekam Suara</h1>
+          <p className="text-xs text-gray-500">{patient.nama}</p>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col p-4">

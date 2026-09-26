@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import AssessmentRoute from './components/AssessmentRoute'
+import { AssessmentProvider } from './contexts/AssessmentContext'
 
 // Layouts
 import RelawanLayout from './components/layout/RelawanLayout'
@@ -38,16 +40,20 @@ function App() {
           path="/relawan"
           element={
             <ProtectedRoute allowedRole="relawan">
-              <RelawanLayout />
+              <AssessmentProvider>
+                <RelawanLayout />
+              </AssessmentProvider>
             </ProtectedRoute>
           }
         >
           <Route index element={<HomePage />} />
           <Route path="patient-lookup" element={<PatientLookupPage />} />
-          <Route path="triage" element={<TriagePage />} />
-          <Route path="triage/verbal" element={<VerbalPage />} />
-          <Route path="triage/nonverbal" element={<NonVerbalPage />} />
-          <Route path="triage/result" element={<ResultPage />} />
+          <Route element={<AssessmentRoute />}>
+            <Route path="triage" element={<TriagePage />} />
+            <Route path="triage/verbal" element={<VerbalPage />} />
+            <Route path="triage/nonverbal" element={<NonVerbalPage />} />
+            <Route path="triage/result" element={<ResultPage />} />
+          </Route>
           <Route path="history" element={<HistoryPage />} />
         </Route>
 
