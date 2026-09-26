@@ -9,7 +9,7 @@ export default function TriagePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-white px-4 py-4 flex items-center gap-3 shadow-sm sticky top-0 z-10">
+      <div className="bg-white px-4 py-4 flex items-center gap-3 shadow-sm">
         <button 
           onClick={() => navigate('/relawan')}
           className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"

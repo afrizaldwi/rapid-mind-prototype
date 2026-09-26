@@ -80,7 +80,7 @@ export default function DashboardPage() {
     setSeeding(true);
     try {
       await seedDemoData();
-      alert("10 data simulasi triase berhasil ditambahkan ke Firebase!");
+      alert("Dataset demo dipastikan tersedia di Firebase tanpa menambah salinan baru.");
       window.location.reload();
     } catch (error) {
       console.error("Error seeding data:", error);

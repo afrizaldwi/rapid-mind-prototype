@@ -125,7 +125,7 @@ export default function ResultPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-      <div className="bg-white px-4 py-4 flex items-center gap-3 shadow-sm sticky top-0 z-10">
+      <div className="bg-white px-4 py-4 flex items-center gap-3 shadow-sm">
         <h1 className="text-lg font-bold text-gray-800">
           Hasil Analisis Triase
         </h1>

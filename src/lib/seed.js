@@ -1,5 +1,40 @@
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDocFromServer, runTransaction, setDoc, Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
+import { findCloudPatientByNik } from "./patients";
+
+const BUDI_NIK = "3201234567890002";
+const DEMO_PREFIX = "rapidmind-phase0-demo";
+const DEMO_START = Date.parse("2026-09-25T08:00:00.000Z");
+
+async function ensureBudiPatient() {
+  const existing = await findCloudPatientByNik(BUDI_NIK);
+  if (existing) {
+    if (existing.patient.nama?.trim().toLocaleLowerCase("id-ID") !== "budi santoso") {
+      throw new Error("NIK demo Budi sudah dipakai profil lain. Gunakan dataset demo yang bersih.");
+    }
+    return;
+  }
+
+  const ref = doc(db, "patients", BUDI_NIK);
+  await runTransaction(db, async (transaction) => {
+    if ((await transaction.get(ref)).exists()) return;
+    transaction.set(ref, {
+      nik: BUDI_NIK,
+      nama: "Budi Santoso",
+      usia: 45,
+      jenisKelamin: "L",
+      poskoName: "Posko Utama - Kota",
+      registeredAt: "2026-09-24T08:00:00.000Z",
+      lastPhase: "lanjutan",
+      pfaCompleted: false,
+      demoSeedKey: `${DEMO_PREFIX}-budi`,
+    });
+  });
+  const confirmed = await findCloudPatientByNik(BUDI_NIK);
+  if (!confirmed || confirmed.patient.nama?.trim().toLocaleLowerCase("id-ID") !== "budi santoso") {
+    throw new Error("Pasien demo Budi belum terkonfirmasi di server.");
+  }
+}
 
 export const SAMPLE_CASES = [
   // Zona Merah
@@ -258,21 +293,37 @@ export const SAMPLE_CASES = [
 ];
 
 export async function seedDemoData() {
-  const collectionRef = collection(db, "cases");
+  await ensureBudiPatient();
   const results = [];
 
-  for (const item of SAMPLE_CASES) {
-    const docRef = await addDoc(collectionRef, {
+  for (const [index, item] of SAMPLE_CASES.entries()) {
+    const key = `${DEMO_PREFIX}-case-${String(index + 1).padStart(2, "0")}`;
+    const ref = doc(db, "cases", key);
+    const existing = await getDocFromServer(ref);
+    if (existing.exists() && existing.data().demoSeedKey !== key) {
+      throw new Error(`Dokumen ${key} sudah dipakai data lain; seeding dihentikan.`);
+    }
+    const timestamp = new Date(DEMO_START + index * 10 * 60 * 1000);
+    const linkedBudi = index === 3 ? {
+      patientNik: BUDI_NIK,
+      patientName: "Budi Santoso",
+      patientAge: 45,
+      patientGender: "L",
+      phase: "lanjutan",
+    } : {};
+    await setDoc(ref, {
       ...item,
-      createdAt: serverTimestamp(),
-      timestamp: new Date().toISOString(),
+      ...linkedBudi,
+      demoSeedKey: key,
+      createdAt: Timestamp.fromDate(timestamp),
+      timestamp: timestamp.toISOString(),
       location: {
         lat: item.lat,
         lng: item.lng,
       },
       syncedFromOffline: false,
     });
-    results.push(docRef.id);
+    results.push(ref.id);
   }
 
   return results;

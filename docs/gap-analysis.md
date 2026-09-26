@@ -2,8 +2,8 @@
 
 > **Tanggal Pembaruan:** 26 September 2026  
 > **Ruang Lingkup:** Audit implementasi aktual terhadap `docs/workflow.md`, `docs/plan.md`, `docs/changes-notes.md`, dan source code pada snapshot proyek saat ini.  
-> **Status Keseluruhan:** **Fondasi prototipe dan integritas sesi asesmen Phase 0A sudah diimplementasikan; pekerjaan Phase 0 lainnya masih terbuka.**
-> **Milestone Saat Ini:** Track A.1 dan Phase 0A (Assessment Session Integrity) terimplementasi. Analisis rinci di bawah mencatat kondisi sebelum Phase 0A kecuali dinyatakan lain.
+> **Status Keseluruhan:** **Source Phase 0A/0B/0C selesai dan smoke test manual Phase 0 untuk prototipe saat ini PASS; migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
+> **Milestone Saat Ini:** Phase 0 ditutup untuk prototipe saat ini; berikutnya Phase 1. Uraian gap lama di bawah diberi konteks historis.
 
 ---
 
@@ -13,13 +13,13 @@ Perubahan terbaru telah menutup gap terbesar pada versi awal, yaitu tidak adanya
 
 Phase 0A menambahkan assessment context yang menyimpan NIK pasien selama alur triase legacy dan menulis `patientNik` secara eksplisit pada kasus. Rute triase tanpa asesmen aktif sekarang kembali ke Patient Lookup.
 
-Tombol **Triase Baru** pada bottom navigation sekarang menuju `/relawan/patient-lookup`. Sinkronisasi offline masih baru mencakup entitas `cases`; pasien baru yang dibuat saat offline belum memiliki mekanisme deferred sync ke Firestore.
+Tombol **Triase Baru** pada bottom navigation menuju `/relawan/patient-lookup`. Source Phase 0B menambahkan retry pasien dan kasus. Firebase, cache offline, startup/reconnect, dan alur demo telah lulus smoke test manual; migrasi v2 berisi data belum diuji runtime.
 
-### Blocker prioritas sebelum fitur besar berikutnya
+### Milestone berikutnya
 
-1. **Tambahkan sinkronisasi pasien yang dibuat saat offline.**
-2. **Seed pasien demo lama agar tombol preset “Pasien Lama” benar-benar ditemukan pada database bersih.**
-3. Setelah pekerjaan Phase 0 tersisa stabil, lanjutkan ke **PFA → Red Flag T0 → SRQ-20 → Risk Factor → Result 4-tier**.
+1. **Phase 1: PFA LOOK/LISTEN/LINK dan Red Flag T0.**
+2. Phase 2 berikutnya: SRQ-20 → Risk Factor → Result 4-tier.
+3. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED** sebagai batas validasi kompatibilitas; kode migrasi dipertahankan.
 
 ---
 
@@ -34,7 +34,7 @@ Tombol **Triase Baru** pada bottom navigation sekarang menuju `/relawan/patient-
 | 5 | Jalur Verbal legacy berbasis NLP keyword | `src/pages/relawan/VerbalPage.jsx`, `src/lib/scoring.js`, `src/lib/keywords.js` | Berfungsi sebagai triase prototype lama; belum SRQ-20 |
 | 6 | Jalur Non-Verbal legacy 8-butir | `src/pages/relawan/NonVerbalPage.jsx` | Checklist observasi sudah clickable dan menghasilkan zona lama |
 | 7 | Offline-first penyimpanan `cases` | `src/lib/db.js`, `src/lib/sync.js` | Kasus selalu disimpan lokal terlebih dahulu |
-| 8 | Auto-sync `cases` saat koneksi kembali | `src/hooks/useOfflineSync.js`, `src/lib/sync.js` | Pending `cases` dengan `synced=0` didorong ke Firestore |
+| 8 | Auto-sync pasien dan `cases` saat startup/reconnect | `src/hooks/useOfflineSync.js`, `src/lib/sync.js`, `src/lib/patients.js` | Pasien pending diproses lebih dulu; startup/reconnect pasien PASS di browser |
 | 9 | Indikator online/offline dan pending sync | `src/components/layout/RelawanLayout.jsx` | Banner offline, counter pending, dan sync toast tersedia |
 | 10 | Dashboard Admin — KPI & distribusi | `src/pages/admin/DashboardPage.jsx` | Snapshot metrik dan kasus terbaru tersedia |
 | 11 | Admin — Browser Kasus | `src/pages/admin/CasesPage.jsx` | Pencarian/filter/detail kasus tersedia |
@@ -43,7 +43,7 @@ Tombol **Triase Baru** pada bottom navigation sekarang menuju `/relawan/patient-
 | 14 | Riwayat Triase Relawan | `src/pages/relawan/HistoryPage.jsx` | Membaca data lokal dan status sinkronisasi |
 | 15 | Konfigurasi PWA/Workbox | `vite.config.js` | Plugin PWA dan precache dikonfigurasi |
 | 16 | **Screen 2 — Identitas Penyintas & Auto-Lookup** | `src/pages/relawan/PatientLookupPage.jsx` | Validasi NIK, local-first lookup, Firestore fallback, registrasi baru, tampilan riwayat, preset demo |
-| 17 | **Dexie v2 untuk data longitudinal awal** | `src/lib/db.js` | Tabel `patients` dan `emergencies` tersedia; `cases` memiliki index `patientNik`/`tier`; `pendingSync` lama dibersihkan |
+| 17 | **Dexie v4 untuk data longitudinal** | `src/lib/db.js` | Baseline v4 bersih PASS; migrasi v2 berisi data → v4 NOT RUNTIME TESTED |
 | 18 | Entry point Home menuju Screen 2 | `src/pages/relawan/HomePage.jsx` | CTA “Mulai Triase Baru” sudah menuju `/relawan/patient-lookup` |
 
 ---
@@ -66,7 +66,7 @@ Tombol **Triase Baru** pada bottom navigation sekarang menuju `/relawan/patient-
 
 ### ⚠️ B. Longitudinal Patient Context
 
-`PatientLookupPage.jsx` membawa data pasien melalui React Router state:
+**Catatan historis sebelum Phase 0A:** `PatientLookupPage.jsx` pernah membawa data pasien melalui React Router state:
 
 ```text
 PatientLookupPage
@@ -75,15 +75,15 @@ PatientLookupPage
 
 Tetapi `TriagePage.jsx` menggunakan `<Link>` ke `/relawan/triage/verbal` dan `/relawan/triage/nonverbal` tanpa meneruskan state pasien. `VerbalPage.jsx` dan `NonVerbalPage.jsx` selanjutnya hanya meneruskan hasil triase ke `ResultPage`.
 
-**Dampak:** `ResultPage` dapat menyimpan kasus tanpa `patientNik`, sehingga lookup riwayat berikutnya tidak melihat asesmen tersebut sebagai bagian dari pasien yang sama.
+**Status saat ini:** Phase 0A memakai Assessment Context yang terikat UID Relawan dan tersimpan di sessionStorage. `ResultPage` menulis `patientNik` dari context; gap ini sudah ditutup.
 
 ### ⚠️ C. Offline-First untuk Entitas Pasien
 
-**Sudah ada:** pasien baru selalu ditulis ke `localDb.patients`, dan ketika perangkat sedang online aplikasi mencoba `addDoc()` ke Firestore.
+**Sebelum Phase 0B:** pasien baru ditulis ke `localDb.patients`, lalu ketika online aplikasi mencoba `addDoc()` ke Firestore tanpa retry pasien.
 
-**Belum ada:** mekanisme queue/retry pasien. Jika penulisan Firestore gagal atau pasien dibuat saat offline, `syncPendingCases()` hanya menyinkronkan tabel `cases` dan **tidak pernah menyinkronkan `patients`**.
+**Status Phase 0B:** pasien lokal memiliki `pending | synced | conflict`. `syncPendingData()` memproses pasien pending sebelum kasus, dan konflik tidak di-retry otomatis. Startup/reconnect pasien dan pasien baru offline → reconnect lulus smoke test manual.
 
-Komentar kode “local is fine, will sync later” pada `PatientLookupPage.jsx` belum sesuai dengan implementasi aktual.
+Komentar lama “local is fine, will sync later” telah diganti oleh alur retry yang nyata.
 
 ### ⚠️ D. PFA (Psychological First Aid)
 
@@ -180,8 +180,8 @@ Belum ada seluruh cluster Role 2:
 
 ### Data Demo dan Migrasi Tier
 
-- `src/lib/seed.js` masih menghasilkan data legacy merah/kuning/hijau.
-- Belum menghasilkan pasien terpisah pada `patients`.
+- `src/lib/seed.js` tetap menghasilkan data legacy merah/kuning/hijau dengan ID demo stabil.
+- Source Phase 0C memastikan pasien Budi di `patients` dan satu riwayat dengan `patientNik` Budi. Siti tidak diseed. Seed berulang dan kedua cabang preset lulus smoke test manual.
 - Belum menghasilkan kasus T0/T1/T2/T3.
 - Belum menghasilkan event emergency T0.
 
@@ -191,32 +191,32 @@ Belum ada seluruh cluster Role 2:
 
 ### P0 — Menghambat alur end-to-end
 
-1. **Patient state hilang setelah `TriagePage`.**  
-   `PatientLookupPage` mengirim `patient` melalui route state, tetapi `TriagePage` tidak meneruskannya ke Verbal/Non-Verbal. Ini memutus `patientNik` dari case hasil asesmen.
+1. **Patient state hilang setelah `TriagePage` — selesai pada Phase 0A.**
+   Assessment Context sekarang menjaga identitas pasien hingga hasil dan penulisan `patientNik`.
 
-2. **Bottom navigation masih melewati Screen 2.**  
-   `RelawanLayout.jsx` masih memiliki:
+2. **Bottom navigation melewati Screen 2 — selesai pada Phase 0A.**
+   Rute lama sebelumnya memiliki:
    ```jsx
    <Link to="/relawan/triage">
    ```
-   sehingga relawan dapat membuat asesmen tanpa NIK walaupun CTA Home sudah diperbaiki.
+   Sekarang “Triase Baru” menuju Patient Lookup dan rute asesmen dijaga `AssessmentRoute`.
 
-3. **Pasien offline tidak memiliki deferred sync.**  
-   `syncPendingCases()` hanya membaca `localDb.cases`; `localDb.patients` tidak memiliki mekanisme retry.
+3. **Pasien offline tidak memiliki deferred sync — selesai pada Phase 0B, smoke test PASS.**
+   Pasien pending kini diproses sebelum `cases`; kegagalan retryable tetap pending dan duplikasi NIK cloud menjadi conflict.
 
-4. **Preset “Pasien Lama” bukan data seed.**  
-   `DEMO_PATIENTS.existing` hanya mengisi field UI. `src/lib/seed.js` tidak membuat record `patients`, sehingga pada database bersih NIK preset tersebut dapat dianggap belum terdaftar.
+4. **Preset “Pasien Lama” bukan data seed — selesai pada Phase 0C, smoke test PASS.**
+   Seed kini memastikan pasien Budi dan satu kasus yang terkait melalui `patientNik`; Siti sengaja tidak diseed.
 
 ### P1 — Integritas data
 
-5. **NIK lokal belum unique.**  
-   Skema `patients: '++id, nik, ...'` memungkinkan record dengan NIK sama tersimpan lebih dari sekali.
+5. **NIK lokal belum unique — source Phase 0B selesai; baseline v4 PASS.**
+   v3 menyimpan salinan row lama dalam audit dan membersihkan duplikasi; v4 memasang `&nik`. Migrasi v2 berisi data → v4 **NOT RUNTIME TESTED**.
 
-6. **Firestore patient create memakai `addDoc()`.**  
-   Setiap registrasi membuat document ID baru. Tanpa uniqueness guard, duplikasi NIK di cloud memungkinkan dan lookup hanya mengambil `snapshot.docs[0]`.
+6. **Firestore patient create dahulu memakai `addDoc()` — selesai pada Phase 0B, smoke test Firebase PASS.**
+   Penulisan baru memakai `patients/{nik}` setelah pembacaan server. Satu dokumen cloud menjadi profil direktori otoritatif; lebih dari satu menjadi konflik tanpa pemilihan `.docs[0]`.
 
-7. **Seed belum mengikuti schema longitudinal baru.**  
-   Data demo masih fokus pada `zona`/`triageResult` legacy dan belum menyiapkan patient history yang dibutuhkan Screen 2.
+7. **Seed Phase 0C tetap menggunakan zona legacy sesuai scope.**
+   Budi kini memiliki linked history; transisi T0/T1/T2/T3 tetap pekerjaan fase berikutnya.
 
 ### P2 — Legacy logic yang akan diganti
 
@@ -258,7 +258,7 @@ Patient Lookup  ────────────────┐
              Save case
 ```
 
-Masalah utama: patient context dapat terputus setelah `/relawan/triage`.
+Catatan historis: patient context dahulu dapat terputus setelah `/relawan/triage`; Phase 0A telah menutupnya.
 
 ### Target workflow
 
@@ -282,10 +282,10 @@ Screen 2–7
 
 | Prioritas | Pekerjaan | Alasan |
 |---|---|---|
-| **P0** | Repair longitudinal routing/context | Tanpa ini Screen 2 tidak menghasilkan rekam pasien yang benar |
-| **P0** | Ubah bottom nav “Triase Baru” → `/relawan/patient-lookup` | Menutup bypass asesmen anonim |
-| **P0** | Patient offline sync + uniqueness strategy | Menjamin janji offline-first berlaku untuk identitas, bukan hanya kasus |
-| **P0** | Seed patient demo baru/lama | Membuat skenario demo Screen 2 deterministik |
+| **Selesai 0A** | Repair longitudinal routing/context | Assessment Context menjaga NIK hingga hasil |
+| **Selesai 0A** | Ubah bottom nav “Triase Baru” → `/relawan/patient-lookup` | Menutup bypass asesmen anonim |
+| **0B selesai; runtime PASS** | Patient offline sync + uniqueness strategy | Firebase/reconnect PASS; migrasi v2 berisi data belum diuji runtime |
+| **0C selesai; runtime PASS** | Seed patient demo baru/lama | Siti/Budi dan seed berulang PASS |
 | **P1** | PFA LOOK/LISTEN/LINK | Menyelesaikan jalur pasien baru |
 | **P1** | Red Flag FAB + T0-Suspect | Menyelesaikan differentiator emergency workflow |
 | **P2** | SRQ-20 + Risk Factor + Result 4-tier | Menyelesaikan jalur longitudinal pasien lama |
@@ -297,6 +297,10 @@ Screen 2–7
 
 ## 8. Kesimpulan Audit
 
-Snapshot saat ini **lebih maju daripada `gap-analysis.md` sebelumnya** karena Screen 2 dan fondasi Dexie v2 sudah tersedia. Namun klaim “Identitas Penyintas & Auto-Lookup selesai” perlu dibatasi: fungsi lookup/UI memang sudah ada, tetapi integrasi longitudinal end-to-end masih belum selesai karena patient context dapat hilang, jalur PFA/SRQ belum tersedia, dan pasien offline belum ikut mekanisme sync.
+Snapshot sebelum 0B memiliki Screen 2 dan Dexie v2; Phase 0A kemudian menjaga patient context. Jalur PFA/SRQ khusus masih belum tersedia. Source Phase 0B menangani keunikan NIK, sinkronisasi pasien, konflik data, dan retry kasus yang idempoten. Source Phase 0C memperbaiki seed demo Siti/Budi.
 
-Fokus berikutnya sebaiknya **bukan menambah dashboard/polish**, melainkan menutup empat P0 integration gaps agar Screen 2 benar-benar menjadi fondasi seluruh alur RAPID-MIND.
+Smoke test manual menemukan overlap header Relawan, kelemahan pemulihan profil saat refresh offline, dan konflik duplikasi cloud yang tetap memblokir pencarian setelah data diperbaiki. Perbaikan source untuk ketiganya telah dibuat dan retest browser mengonfirmasi **PASS**. Cache pasien offline, sinkronisasi startup/reconnect, baseline v4 bersih, serta seed dan cabang Siti/Budi juga **PASS**.
+
+Data prototipe lama sengaja direset; `users` Firestore dipertahankan, sedangkan data pasien/kasus dan site data browser dibersihkan. Aplikasi dimulai dari Dexie v4 bersih lalu seed demo dijalankan ulang. Karena itu, migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi telah ditinjau dari source dan tetap menjadi perlindungan kompatibilitas.
+
+Phase 0 ditutup untuk prototipe saat ini. Milestone pengembangan langsung berikutnya adalah **Phase 1: PFA LOOK/LISTEN/LINK dan Red Flag T0**. Hardening Phase 0 dilanjutkan hanya bila defect baru ditemukan.

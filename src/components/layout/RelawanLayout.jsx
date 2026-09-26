@@ -9,12 +9,11 @@ export default function RelawanLayout() {
   const { userProfile, logout } = useAuth();
   const { assessment, clearAssessment } = useAssessment();
   const assessmentStartedAt = assessment?.startedAt;
-  const { isOnline, pendingCount } = useOfflineSync();
+  const { isOnline, pendingCount, conflictCount, lastSyncResult } = useOfflineSync();
   const isOffline = !isOnline;
   const location = useLocation();
   const navigate = useNavigate();
   const [showSyncToast, setShowSyncToast] = useState(false);
-  const [prevOffline, setPrevOffline] = useState(isOffline);
   const isAssessmentPath = location.pathname === '/relawan/patient-lookup' ||
                            location.pathname === '/relawan/triage' ||
                            location.pathname.startsWith('/relawan/triage/');
@@ -26,13 +25,12 @@ export default function RelawanLayout() {
                         location.pathname.includes('/patient-lookup');
 
   useEffect(() => {
-    if (prevOffline && !isOffline && pendingCount === 0) {
+    if (lastSyncResult?.complete) {
       setShowSyncToast(true);
       const timer = setTimeout(() => setShowSyncToast(false), 3000);
       return () => clearTimeout(timer);
     }
-    setPrevOffline(isOffline);
-  }, [isOffline, pendingCount, prevOffline]);
+  }, [lastSyncResult]);
 
   useEffect(() => {
     if (assessmentStartedAt && location.pathname === '/relawan' &&
@@ -67,22 +65,21 @@ export default function RelawanLayout() {
       </header>
 
       {/* Offline Banner */}
-      {isOffline && (
+      {(isOffline || pendingCount > 0 || conflictCount > 0) && (
         <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-between z-10 sticky top-[60px]">
           <div className="flex items-center gap-2 text-amber-800 text-sm">
             <WifiOff className="w-4 h-4" />
-            <span>Mode Offline — Data disimpan secara lokal</span>
+            <span>{isOffline ? 'Mode Offline — Data disimpan secara lokal' : pendingCount > 0 ? 'Data menunggu sinkronisasi' : 'Konflik data pasien perlu ditinjau'}</span>
           </div>
-          {pendingCount > 0 && (
-            <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
-              {pendingCount}
-            </span>
-          )}
+          <div className="flex gap-1 text-xs font-medium text-amber-900">
+            {pendingCount > 0 && <span>{pendingCount} pending</span>}
+            {conflictCount > 0 && <span>{conflictCount} konflik</span>}
+          </div>
         </div>
       )}
 
       {/* Sync Toast */}
-      {showSyncToast && (
+      {showSyncToast && pendingCount === 0 && conflictCount === 0 && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50 animate-fade-in">
           <CheckCircle className="w-5 h-5" />
           <span className="text-sm font-medium">Sinkronisasi selesai!</span>

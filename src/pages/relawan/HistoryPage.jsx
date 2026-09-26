@@ -55,7 +55,7 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-white px-4 py-4 shadow-sm sticky top-0 z-10 flex items-center justify-between">
+      <div className="bg-white px-4 py-4 shadow-sm flex items-center justify-between">
         <h1 className="text-lg font-bold text-gray-800">Riwayat Triase Saya</h1>
         <button
           onClick={loadHistory}
