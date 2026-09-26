@@ -125,9 +125,11 @@ Urutan di bawah menggantikan pendekatan “langsung tiga track paralel” sampai
 
 ---
 
-## Phase 0 — Integration Hardening Setelah Track A.1 (**NEXT**)
+## Phase 0 — Integration Hardening Setelah Track A.1 (**0A implemented; remaining work pending**)
 
 ### 0.1 Tutup semua bypass Screen 2
+
+**Status:** Diimplementasikan pada Phase 0A.
 
 **Modify:** `src/components/layout/RelawanLayout.jsx`
 
@@ -138,6 +140,8 @@ Urutan di bawah menggantikan pendekatan “langsung tiga track paralel” sampai
 **Acceptance criteria:** tidak ada entry point normal dari UI yang dapat memulai assessment tanpa identitas pasien.
 
 ### 0.2 Buat assessment patient context yang tidak hilang antar route
+
+**Status:** Diimplementasikan pada Phase 0A dengan NIK sebagai penghubung pasien; tidak memakai `patientId` lintas penyimpanan.
 
 **Recommended new component/context:** `src/contexts/AssessmentContext.jsx` atau mekanisme equivalent yang persisten ringan.
 
@@ -582,4 +586,4 @@ Setiap prompt Codex harus menyertakan:
 - test/build/lint requirement;
 - instruksi memperbarui `docs/changes-notes.md` setelah task berhasil.
 
-**Next Codex milestone:** **Phase 0 — Integration Hardening**, dimulai dari route entry + patient context continuity sebelum membuat PFA.
+**Next Codex milestone:** Lanjutkan pekerjaan Phase 0 yang tersisa setelah integritas sesi asesmen Phase 0A; keunikan NIK dan sinkronisasi pasien offline belum ditangani.

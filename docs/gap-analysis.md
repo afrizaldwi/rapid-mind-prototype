@@ -2,8 +2,8 @@
 
 > **Tanggal Pembaruan:** 26 September 2026  
 > **Ruang Lingkup:** Audit implementasi aktual terhadap `docs/workflow.md`, `docs/plan.md`, `docs/changes-notes.md`, dan source code pada snapshot proyek saat ini.  
-> **Status Keseluruhan:** **Fondasi prototipe sudah berjalan, Screen 2 sudah diimplementasikan, tetapi alur longitudinal pasien belum tersambung end-to-end.**  
-> **Milestone Saat Ini:** Track A.1 (Identitas Penyintas & Auto-Lookup) **terimplementasi pada level UI/lookup**, dengan beberapa pekerjaan integrasi kritis yang harus diselesaikan sebelum melanjutkan ke PFA/SRQ-20.
+> **Status Keseluruhan:** **Fondasi prototipe dan integritas sesi asesmen Phase 0A sudah diimplementasikan; pekerjaan Phase 0 lainnya masih terbuka.**
+> **Milestone Saat Ini:** Track A.1 dan Phase 0A (Assessment Session Integrity) terimplementasi. Analisis rinci di bawah mencatat kondisi sebelum Phase 0A kecuali dinyatakan lain.
 
 ---
 
@@ -11,17 +11,15 @@
 
 Perubahan terbaru telah menutup gap terbesar pada versi awal, yaitu tidak adanya identitas penyintas. `PatientLookupPage.jsx` sekarang sudah menyediakan validasi NIK, pencarian lokal IndexedDB, pencarian Firestore saat online, pendaftaran pasien baru, riwayat asesmen, dan percabangan pasien baru/lama.
 
-Namun, implementasi Screen 2 belum sepenuhnya membentuk alur longitudinal yang utuh. Saat pasien diarahkan ke `/relawan/triage`, identitas pasien dibawa melalui `location.state`, tetapi `TriagePage.jsx` tidak meneruskan state tersebut ke Jalur Verbal/Non-Verbal. Akibatnya, `ResultPage.jsx` dan data `cases` yang disimpan dapat kehilangan `patientNik`, sehingga asesmen tidak lagi terhubung ke penyintas yang dipilih.
+Phase 0A menambahkan assessment context yang menyimpan NIK pasien selama alur triase legacy dan menulis `patientNik` secara eksplisit pada kasus. Rute triase tanpa asesmen aktif sekarang kembali ke Patient Lookup.
 
-Selain itu, tombol **Triase Baru** pada bottom navigation masih langsung menuju `/relawan/triage`, sehingga Screen 2 dapat dilewati. Sinkronisasi offline juga baru mencakup entitas `cases`; pasien baru yang dibuat saat offline belum memiliki mekanisme deferred sync ke Firestore.
+Tombol **Triase Baru** pada bottom navigation sekarang menuju `/relawan/patient-lookup`. Sinkronisasi offline masih baru mencakup entitas `cases`; pasien baru yang dibuat saat offline belum memiliki mekanisme deferred sync ke Firestore.
 
 ### Blocker prioritas sebelum fitur besar berikutnya
 
-1. **Pertahankan identitas pasien sepanjang seluruh assessment flow.**
-2. **Tutup jalur bypass Screen 2 dari bottom navigation.**
-3. **Tambahkan sinkronisasi pasien yang dibuat saat offline.**
-4. **Seed pasien demo lama agar tombol preset “Pasien Lama” benar-benar ditemukan pada database bersih.**
-5. Setelah empat poin tersebut stabil, lanjutkan ke **PFA → Red Flag T0 → SRQ-20 → Risk Factor → Result 4-tier**.
+1. **Tambahkan sinkronisasi pasien yang dibuat saat offline.**
+2. **Seed pasien demo lama agar tombol preset “Pasien Lama” benar-benar ditemukan pada database bersih.**
+3. Setelah pekerjaan Phase 0 tersisa stabil, lanjutkan ke **PFA → Red Flag T0 → SRQ-20 → Risk Factor → Result 4-tier**.
 
 ---
 

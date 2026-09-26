@@ -2,16 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Brain, Home, PlusCircle, ClipboardList, LogOut, WifiOff, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useAssessment } from '../../hooks/useAssessment';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 
 export default function RelawanLayout() {
   const { userProfile, logout } = useAuth();
+  const { assessment, clearAssessment } = useAssessment();
+  const assessmentStartedAt = assessment?.startedAt;
   const { isOnline, pendingCount } = useOfflineSync();
   const isOffline = !isOnline;
   const location = useLocation();
   const navigate = useNavigate();
   const [showSyncToast, setShowSyncToast] = useState(false);
   const [prevOffline, setPrevOffline] = useState(isOffline);
+  const isAssessmentPath = location.pathname === '/relawan/patient-lookup' ||
+                           location.pathname === '/relawan/triage' ||
+                           location.pathname.startsWith('/relawan/triage/');
   
   // Determine if bottom nav should be hidden (on triage sub-pages that have their own action buttons)
   const hideBottomNav = location.pathname.includes('/triage/verbal') || 
@@ -28,7 +34,15 @@ export default function RelawanLayout() {
     setPrevOffline(isOffline);
   }, [isOffline, pendingCount, prevOffline]);
 
+  useEffect(() => {
+    if (assessmentStartedAt && location.pathname === '/relawan' &&
+        location.state?.completedAssessmentStartedAt === assessmentStartedAt) {
+      clearAssessment();
+    }
+  }, [location.pathname, location.state, assessmentStartedAt, clearAssessment]);
+
   const handleLogout = async () => {
+    clearAssessment();
     await logout();
     navigate('/login');
   };
@@ -94,12 +108,12 @@ export default function RelawanLayout() {
               <span className="text-[10px] font-medium mt-1">Beranda</span>
             </Link>
             <Link
-              to="/relawan/triage"
+              to="/relawan/patient-lookup"
               className={`flex flex-col items-center py-3 px-6 ${
-                location.pathname.startsWith('/relawan/triage') ? 'text-blue-600' : 'text-gray-500 hover:text-blue-500'
+                isAssessmentPath ? 'text-blue-600' : 'text-gray-500 hover:text-blue-500'
               }`}
             >
-              <PlusCircle className={`w-6 h-6 ${location.pathname.startsWith('/relawan/triage') ? 'fill-blue-50' : ''}`} />
+              <PlusCircle className={`w-6 h-6 ${isAssessmentPath ? 'fill-blue-50' : ''}`} />
               <span className="text-[10px] font-medium mt-1">Triase Baru</span>
             </Link>
             <Link
