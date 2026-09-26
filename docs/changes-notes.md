@@ -3,7 +3,7 @@
 > **Dokumen:** Implementation & Changelog Notes  
 > **Ruang Lingkup:** Track A — Poin 1 (Screen 2: Identitas Penyintas & Auto-Lookup System)  
 > **Tanggal:** 25 September 2026  
-> **Status:** Implementasi Screen 2 Selesai & Terverifikasi — Integrasi End-to-End Dilanjutkan pada Phase 0 (Build 0 Error, Lint Clean)
+> **Status:** Phase 0 source selesai dan smoke test browser terkonfirmasi; migrasi Dexie v2 berisi data belum diuji runtime. Phase 1 adalah milestone berikutnya.
 ---
 
 ## 1. Ringkasan Eksekutif
@@ -134,3 +134,67 @@ Dedicated PFA dan SRQ-20 flow belum diimplementasikan pada Track A.1. Integrasi 
 - **Validasi:** `npm run lint` lulus tanpa error (peringatan kode lama masih ada); `npm run build` berhasil. Jalur langsung, lookup baru/lama, refresh, save sukses/gagal, dan logout ditinjau dari rute serta aliran data di source. Interaksi browser dengan akun Firebase tidak dijalankan pada tahap ini.
 
 Pekerjaan Phase 0 lain seperti keunikan NIK dan sinkronisasi pasien offline masih terbuka. PFA dan SRQ-20 khusus belum diimplementasikan.
+
+Catatan kronologis: pernyataan “interaksi browser tidak dijalankan” di atas berlaku pada saat implementasi 0A ditulis. Pemilik proyek kemudian melaporkan bahwa smoke test manual 0A dilakukan; sesi pengerjaan 0B ini tidak mengulang tes browser tersebut.
+
+---
+
+## Phase 0B — Patient Persistence & Offline Sync Integrity (26 September 2026)
+
+- Dexie v2 dibiarkan utuh. v3 menambah status sinkronisasi dan audit semua row pasien lama yang duplikat atau invalid; duplikat yang ekuivalen menyisakan satu row deterministik, sedangkan grup berbeda secara material dikarantina. v4 baru memasang index unik `&nik`. Semua row v2 yang dipindah tersimpan lengkap dalam audit.
+- Status pasien `pending`, `synced`, dan `conflict` membedakan retryable, berhasil, dan integritas yang memerlukan resolusi manual. Konflik tidak di-retry otomatis. Hitungan pending dan konflik dipisahkan.
+- `src/lib/patients.js` memusatkan lookup, registrasi lokal dahulu, pembacaan cloud dari server, rekonsiliasi profil, cache cloud ke Dexie, serta sync pasien pending. Dokumen baru memakai `patients/{nik}` setelah cek canonical dan query NIK; dokumen legacy tunggal dipakai tanpa duplikasi. Lebih dari satu dokumen NIK menjadi konflik eksplisit. NIK tetap identitas domain dan `patientNik` tetap linkage kasus.
+- Field profil yang ada pada satu dokumen cloud menjadi otoritatif untuk cache direktori; field cloud yang tidak ada boleh memakai nilai lokal. Perbedaan usia/posko/status/registrasi biasa tidak membuat identitas baru. Nilai formulir lokal yang diganti disimpan dalam audit. Posko/usia pada asesmen aktif tetap merupakan snapshot konteks asesmen.
+- Kasus kini menyimpan `firestoreId` sebelum cloud write dan memakai `setDoc()` pada ID tersebut, sehingga retry setelah cloud write sukses tetapi update lokal gagal tidak membuat dokumen baru. Kasus lama yang sudah synced tetap kompatibel. Kasus pending lama yang pernah berhasil `addDoc()` tetapi kehilangan ID cloud tidak bisa direkonsiliasi tanpa bukti tambahan; periksa data lama secara manual bila relevan.
+- Sinkronisasi startup/reconnect memproses pasien sebelum kasus. Banner menampilkan pending dan konflik; toast sukses hanya mengikuti percobaan sinkronisasi nyata yang menyisakan nol pending dan nol konflik.
+- **Verifikasi pada tahap implementasi source:** review source, `git diff --check`, lint, dan build. Migrasi IndexedDB aktual, Firebase, dan reconnect browser belum dijalankan pada tahap itu; hasil smoke test berikutnya tercatat pada bagian penutupan Phase 0.
+
+---
+
+## Phase 0C — Deterministic Demo Patient Dataset (26 September 2026)
+
+- Seed admin memastikan pasien Budi (`3201234567890002`) ada di Firestore setelah pemeriksaan server canonical dan legacy. Jika NIK itu sudah milik profil demo berbeda atau memiliki beberapa dokumen, seeding berhenti tanpa menimpa data.
+- Satu dari sepuluh kasus zona legacy memakai `patientNik` Budi dan profil pasien yang sesuai. Nama relawan dalam sampel tidak lagi disalahartikan sebagai identitas pasien.
+- Kesepuluh kasus memakai ID dan timestamp demo yang stabil dengan `setDoc()`; seeding ulang memakai dokumen yang sama. Siti (`3201234567890001`) tidak dibuat oleh seed. Dokumen acak dari seed lama tidak dihapus.
+- Pesan tombol admin diubah agar tidak mengklaim sepuluh dokumen baru selalu ditambahkan.
+- **Verifikasi pada tahap implementasi source:** review source, lint, dan build. Hasil preset dan seeding berulang di Firebase/browser kemudian diuji manual; hasilnya tercatat pada bagian penutupan Phase 0.
+
+---
+
+## Phase 0 — Perbaikan temuan smoke test browser (26 September 2026)
+
+Smoke test manual menemukan tiga masalah: refresh offline dapat menampilkan halaman kosong, header lokal halaman Relawan bertumpuk dengan header/banner global, dan konflik duplikasi NIK cloud tetap memblokir pencarian setelah data Firestore diperbaiki.
+
+- Source fix auth mengaktifkan cache IndexedDB Firestore melalui `persistentLocalCache()` sambil mempertahankan long polling. `AuthContext` memeriksa profil dari server saat online dan memulihkan profil cache ketika offline atau pembacaan server gagal. `ProtectedRoute` memisahkan loading auth/profil dari profil yang tidak tersedia, menyediakan pesan dan tombol ulangi, serta tetap menerapkan role yang diketahui.
+- Enam header halaman Relawan (Patient Lookup, Triage, Verbal, Non-Verbal, Result, History) kembali ke alur dokumen. Header dan banner global tetap dimiliki `RelawanLayout`.
+- Pencarian **Cari** saat online dapat memeriksa ulang konflik `cloud-duplicate` melalui pembacaan server. Tepat satu dokumen cloud menyelesaikan audit dan merekonsiliasi cache; lebih dari satu atau nol dokumen tetap konflik. Konflik migrasi lokal tidak diselesaikan oleh pencarian. Sinkronisasi latar tetap melewati pasien berstatus `conflict`.
+- **Status pada saat source fix:** browser belum diuji ulang. Hasil retest final tercatat pada bagian penutupan Phase 0 di bawah. Reload offline pada `npm run dev` bukan gate PWA produksi.
+
+---
+
+## Penutupan Phase 0 — hasil smoke test manual
+
+Pemilik proyek mengonfirmasi hasil berikut pada prototipe saat ini:
+
+| Skenario | Hasil |
+|---|---|
+| Regresi assessment/session Phase 0A | PASS |
+| Perbaikan overlap header/banner Relawan | PASS |
+| Pasien cloud tercache lokal dan tersedia offline | PASS |
+| Deteksi duplikasi NIK cloud | PASS |
+| Pemulihan konflik duplikasi cloud setelah perbaikan Firestore | PASS |
+| Refresh offline PWA produksi dan pemulihan autentikasi/profil | PASS |
+| Sinkronisasi pasien saat offline → online | PASS |
+| Sinkronisasi pasien pending saat startup sudah online | PASS |
+| Seed demo deterministik berulang | PASS |
+| Cabang pasien baru Siti | PASS |
+| Cabang pasien lama Budi dengan riwayat tertaut | PASS |
+| Pasien baru dibuat offline lalu tersinkron saat reconnect | PASS |
+| Baseline database Dexie v4 yang bersih | PASS |
+| Migrasi Dexie v2 berisi data → v4 | **NOT RUNTIME TESTED** |
+
+Data demo dan pengujian lokal/Firestore sengaja direset karena seluruh data prototipe sebelumnya dapat dibuang. Koleksi Firestore `users` dipertahankan; data pasien dan kasus aplikasi/demo dibersihkan; site data browser direset; aplikasi dimulai dari database Dexie v4 yang bersih; seed deterministik dijalankan ulang dengan berhasil. Karena tidak dibuat database v2 berisi data buatan untuk pengujian, migrasi v2 → v4 tetap berupa perlindungan kompatibilitas yang diimplementasikan dan ditinjau dari source, tanpa klaim lulus runtime.
+
+Validasi reload offline formal menggunakan `npm run build`, `npm run preview`, Google Chrome, DevTools Network → Offline, lalu normal reload: **PASS**. Brave juga bekerja saat koneksi Wi-Fi/jaringan nyata dimatikan. Pada simulasi Offline di Brave DevTools, muncul `ERR_INTERNET_DISCONNECTED` meskipun service worker aktif dan Workbox precache terisi; ini dicatat sebagai caveat lingkungan pengujian, bukan kesimpulan umum tentang Brave. Tidak ada perubahan source PWA tambahan karena pengujian Chrome DevTools dan putus jaringan nyata di Brave berhasil.
+
+Phase 0 ditutup untuk prototipe saat ini. Milestone pengembangan berikutnya adalah Phase 1 (PFA LOOK/LISTEN/LINK dan Red Flag T0); migrasi legacy yang belum diuji tetap dicatat sebagai batas validasi, bukan hasil PASS.

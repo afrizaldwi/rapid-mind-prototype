@@ -16,14 +16,8 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 import { useAssessment } from "../../hooks/useAssessment";
 import { localDb } from "../../lib/db";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { lookupPatient, registerPatient } from "../../lib/patients";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 // ───────────────────────────────────────────────
@@ -61,6 +55,23 @@ export default function PatientLookupPage() {
   const isNikValid = /^\d{16}$/.test(nik);
   const isFormComplete = isNikValid && nama.trim() && usia.trim() && jenisKelamin;
 
+  const loadHistory = async (patientNik) => {
+    const localCases = await localDb.cases.where("patientNik").equals(patientNik).toArray();
+    if (!navigator.onLine) return localCases;
+    try {
+      const snapshot = await getDocs(query(collection(db, "cases"), where("patientNik", "==", patientNik)));
+      const localCloudIds = new Set(localCases.map((item) => item.firestoreId).filter(Boolean));
+      const cloudCases = snapshot.docs.filter((item) => !localCloudIds.has(item.id)).map((item) => ({ id: item.id, ...item.data() }));
+      return [...localCases, ...cloudCases].sort((a, b) => {
+        const date = (item) => new Date(item.timestamp?.toDate?.() || item.timestamp || 0).getTime() || 0;
+        return date(b) - date(a);
+      });
+    } catch (error) {
+      console.error("Gagal memuat riwayat cloud:", error);
+      return localCases;
+    }
+  };
+
   // ──────────── Auto-Lookup Logic ────────────
   const handleLookup = async () => {
     if (!isNikValid) {
@@ -72,75 +83,24 @@ export default function PatientLookupPage() {
     setLookupResult(null);
 
     try {
-      // 1. Check local IndexedDB first
-      const localPatient = await localDb.patients
-        .where("nik")
-        .equals(nik)
-        .first();
-
-      if (localPatient) {
-        // Fetch local case history for this patient
-        const localCases = await localDb.cases
-          .where("patientNik")
-          .equals(nik)
-          .reverse()
-          .sortBy("timestamp");
-
+      const result = await lookupPatient(nik, navigator.onLine);
+      if (result) {
+        const history = await loadHistory(nik);
         setLookupResult({
           found: true,
-          patient: localPatient,
-          history: localCases,
-          source: "local",
+          patient: result.patient,
+          history,
+          source: result.source,
         });
-
-        // Auto-fill form from stored data
-        setNama(localPatient.nama || nama);
-        setUsia(localPatient.usia?.toString() || usia);
-        setJenisKelamin(localPatient.jenisKelamin || jenisKelamin);
-        setIsSearching(false);
+        setNama(result.patient.nama || nama);
+        setUsia(result.patient.usia?.toString() || usia);
+        setJenisKelamin(result.patient.jenisKelamin || jenisKelamin);
         return;
       }
-
-      // 2. Check Firestore if online
-      if (navigator.onLine) {
-        const patientsRef = collection(db, "patients");
-        const q = query(patientsRef, where("nik", "==", nik));
-        const snapshot = await getDocs(q);
-
-        if (!snapshot.empty) {
-          const patientDoc = snapshot.docs[0];
-          const patientData = { id: patientDoc.id, ...patientDoc.data() };
-
-          // Also check Firestore cases for this patient
-          const casesRef = collection(db, "cases");
-          const casesQuery = query(casesRef, where("patientNik", "==", nik));
-          const casesSnapshot = await getDocs(casesQuery);
-          const firestoreCases = casesSnapshot.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }));
-
-          setLookupResult({
-            found: true,
-            patient: patientData,
-            history: firestoreCases,
-            source: "firestore",
-          });
-
-          // Auto-fill form from stored data
-          setNama(patientData.nama || nama);
-          setUsia(patientData.usia?.toString() || usia);
-          setJenisKelamin(patientData.jenisKelamin || jenisKelamin);
-          setIsSearching(false);
-          return;
-        }
-      }
-
-      // 3. Not found anywhere
       setLookupResult({ found: false });
     } catch (err) {
       console.error("Lookup error:", err);
-      setError("Gagal melakukan pencarian. Coba lagi.");
+      setError(err.name === "PatientConflictError" ? err.message : "Gagal melakukan pencarian cloud. Coba lagi saat layanan tersedia.");
     } finally {
       setIsSearching(false);
     }
@@ -163,27 +123,19 @@ export default function PatientLookupPage() {
     };
 
     try {
-      // Save locally
-      await localDb.patients.add(patientData);
-
-      // Save to Firestore if online
-      if (navigator.onLine) {
-        try {
-          await addDoc(collection(db, "patients"), {
-            ...patientData,
-            createdAt: serverTimestamp(),
-          });
-        } catch {
-          // Firestore save failed — local is fine, will sync later
-        }
+      const result = await registerPatient(patientData, navigator.onLine);
+      if (result.existing) {
+        const history = await loadHistory(nik);
+        setLookupResult({ found: true, patient: result.patient, history, source: "local" });
+        setError("NIK sudah terdaftar. Gunakan data pasien yang ditemukan.");
+        return;
       }
-
-      startAssessment({ patient: patientData, phase: "akut", isNewPatient: true });
+      startAssessment({ patient: result.patient, phase: "akut", isNewPatient: true });
       // Falls back to triage until the dedicated PFA flow is built.
       navigate("/relawan/triage");
     } catch (err) {
       console.error("Registration error:", err);
-      setError("Gagal menyimpan data pasien.");
+      setError(err.name === "PatientConflictError" ? err.message : "Gagal menyimpan data pasien.");
     }
   };
 
@@ -221,7 +173,7 @@ export default function PatientLookupPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header */}
-      <div className="bg-white px-4 py-4 flex items-center gap-3 shadow-sm sticky top-0 z-10">
+      <div className="bg-white px-4 py-4 flex items-center gap-3 shadow-sm">
         <button
           onClick={() => navigate("/relawan")}
           className="p-1 -ml-1 text-gray-600 hover:text-gray-800"
@@ -321,7 +273,7 @@ export default function PatientLookupPage() {
                   Penyintas Ditemukan
                 </h3>
                 <p className="text-xs text-amber-600 mt-0.5">
-                  NIK sudah terdaftar. Riwayat PFA tersedia.
+                  NIK sudah terdaftar. Riwayat asesmen tersedia.
                 </p>
               </div>
             </div>
