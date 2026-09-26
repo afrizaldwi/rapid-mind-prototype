@@ -2,7 +2,7 @@
 
 > **Dokumen:** Rencana Eksekusi & Implementasi Prototipe RAPID-MIND  
 > **Tanggal Pembaruan:** 26 September 2026  
-> **Status:** **Phase 0A/0B/0C diimplementasikan dan smoke test browser Phase 0 terkonfirmasi; migrasi v2 berisi data belum diuji runtime. Berikutnya Phase 1.**
+> **Status:** **Phase 0A/0B/0C selesai dan smoke test browser Phase 0 terkonfirmasi. Phase 1A fondasi persistensi bertipe telah lulus pemeriksaan manual browser/runtime terpilih dan Vitest domain/sinkronisasi; migrasi v2 berisi data belum diuji runtime. Berikutnya Phase 1B.**
 > **Target:** Prototipe demo end-to-end tanpa *dead end*, mencakup alur Relawan, Faskes/PSC 119, dan Admin BPBD/Dinkes.
 
 ---
@@ -14,6 +14,7 @@
 | Fondasi React/Firebase/PWA | ✅ | Sudah tersedia |
 | Auth + RBAC `relawan/admin` | ✅ | Role `nakes` belum ada |
 | Legacy verbal/non-verbal triage | ✅ | Akan menjadi legacy setelah SRQ-20/4-tier aktif |
+| Phase 1A: `cases` bertipe/berversi | ✅/⚠️ | Source, pemeriksaan manual browser/runtime terpilih, dan Vitest PASS; belum full E2E |
 | Offline `patients` dan `cases` + reconnect sync | ✅ | Startup/reconnect pasien dan pasien baru offline → reconnect lulus smoke test manual |
 | Dashboard Admin dasar | ✅ | Snapshot `getDocs`, belum real-time |
 | **Screen 2 Patient Lookup** | ✅/⚠️ | UI, NIK lookup, register, history sudah ada; integrasi downstream belum utuh |
@@ -38,7 +39,7 @@
 
 ### Temuan yang mengubah urutan plan
 
-Phase 0A menutup putusnya patient context dan bypass bottom nav. Source Phase 0B menangani persistensi/sinkronisasi pasien dan kasus; source Phase 0C menyiapkan seed demo deterministik. Smoke test manual Firebase, reconnect, baseline v4 bersih, PWA refresh offline, dan seed telah terkonfirmasi PASS. Migrasi v2 berisi data → v4 tetap NOT RUNTIME TESTED.
+Phase 0A menutup putusnya patient context dan bypass bottom nav. Source Phase 0B menangani persistensi/sinkronisasi pasien dan kasus; source Phase 0C menyiapkan seed demo deterministik. Smoke test manual Firebase, reconnect, baseline v4 bersih, PWA refresh offline, dan seed telah terkonfirmasi PASS. Phase 1A menambahkan `recordType`, `protocolVersion`, `responses`, dan pembaca zona yang aman tanpa mengubah Dexie v4. Pemeriksaan manual Phase 1A untuk simpan legacy verbal/non-verbal, PFA offline→reconnect/cloud, payload tanpa zona/lokasi palsu, dan pembaca Relawan/Admin PASS. Urutan pasien sebelum kasus diuji oleh Vitest, belum diklaim sebagai pemeriksaan browser manual. Migrasi v2 berisi data → v4 tetap NOT RUNTIME TESTED.
 
 ---
 
@@ -80,16 +81,17 @@ users
 └── { uid, email, name, role, poskoName, poskoLat, poskoLng, phone }
 
 patients
-└── { nik, nama, usia, jenisKelamin, poskoName,
-      registeredAt, lastPhase, pfaCompleted, syncStatus }
+└── { nik, nama, usia, jenisKelamin, poskoName, registeredAt, syncStatus,
+      lastPhase?, pfaCompleted? } // dua field terakhir hanya kompatibilitas, bukan sumber kebenaran
 
-pfaRecords / cases
-└── { patientNik, phase:"akut", look, listen, link,
-      relawanId, poskoName, timestamp, synced }
-
-assessments / cases
-└── { patientNik, phase:"lanjutan", srq20Score,
-      answers, riskFactors, riskFactorScore, tier, timestamp, synced }
+cases (rekam asesmen longitudinal)
+├── legacy: { recordType?:"legacy-triage", protocolVersion?, patientNik?,
+│             zona, triageResult?, jalur, timestamp, synced, firestoreId }
+├── PFA: { recordType:"pfa", protocolVersion, patientNik, phase:"akut",
+│          responses:{ [itemId]: nilai }, relawanId, poskoName,
+│          timestamp, synced, firestoreId }
+└── SRQ-20 nanti: { recordType:"srq20", protocolVersion, patientNik,
+                   phase:"lanjutan", responses, tier, timestamp, synced, firestoreId }
 
 emergencies
 └── { patientNik, relawanId, poskoName, lat, lng,
@@ -210,6 +212,14 @@ Skenario wajib:
 
 ## Phase 1 — Acute Flow: PFA + Red Flag T0
 
+### 1.0 Fondasi persistensi asesmen bertipe (Phase 1A — source selesai)
+
+- `cases` tetap menjadi store longitudinal; ResultPage legacy baru dan record bertipe memakai `recordType` dan `protocolVersion`. `responses` memakai ID item stabil dengan nilai skalar (teks, angka hingga, boolean, atau null) agar isi protokol dapat diganti. PFA dan SRQ-20 belum memiliki halaman/protokol.
+- Record lama tanpa tipe dihitung sebagai triase legacy hanya bila zona merah/kuning/hijau valid. Record yang rusak atau tidak dikenal tidak menjadi Zona Hijau. PFA tampil netral dan dikeluarkan dari statistik/peta zona legacy.
+- Upload kasus dengan `patientNik` memastikan pasien lokal sudah `synced`, atau menyinkronkan pasien `pending` terlebih dahulu. Konflik/kegagalan membuat kasus tetap pending. Kasus lama tanpa `patientNik` tetap kompatibel.
+- PFA/record bertipe tidak mendapat `zona`, `triageResult`, atau koordinat fallback demo; `location` hanya dibuat dari pasangan angka lat/lng yang valid. ID Firestore kasus tetap dipersist sebelum `setDoc()` dan dipakai ulang saat retry.
+- Dexie tetap v4. Bukti PFA selesai nantinya berasal dari record PFA selesai, bukan `patients.pfaCompleted`/`lastPhase`. Pemeriksaan manual browser/runtime terpilih PASS. Vitest mencakup validasi/klasifikasi bertipe, kompatibilitas legacy, serialisasi, urutan pasien→kasus, penggunaan ulang ID Firestore, dan lokasi bertipe; belum ada suite E2E penuh.
+
 ### 1.1 PFA Wizard (`PfaPage.jsx` — Screen 3)
 
 **New:** `src/pages/relawan/PfaPage.jsx`
@@ -224,7 +234,7 @@ Requirements:
 - Stepper UI mobile-first.
 - State tidak hilang antar langkah.
 - Save record lokal terlebih dahulu.
-- Update `patients.pfaCompleted = true` dan `lastPhase` sesuai desain final.
+- Simpan satu record PFA selesai sebagai bukti PFA; jangan menjadikan `patients.pfaCompleted` atau `lastPhase` sumber kebenaran.
 - Selesai PFA tidak boleh memaksa pasien akut langsung menjalani SRQ-20 bila workflow demo memisahkan fase hari 1–3 vs hari 4–30.
 
 ### 1.2 Persistent Red Flag FAB (`RedFlagFAB.jsx` — Screen 4 trigger)
@@ -479,6 +489,7 @@ Lalu jalankan semua scenario demo pada browser normal + simulated offline.
 | ✅ Phase 0A/0B | `src/components/layout/RelawanLayout.jsx` | Bottom nav ke lookup; status pending/konflik; RedFlagFAB tetap Phase 1 |
 | ✅ Phase 0A | `src/contexts/AssessmentContext.jsx` | Active patient/phase context + session persistence |
 | ✅ Phase 0B | `src/lib/sync.js` | Pasien lalu kasus; emergency sync tetap di luar Phase 0 |
+| ✅/⚠️ Phase 1A | `src/lib/caseRecords.js`, `src/lib/sync.js`, pembaca kasus Relawan/Admin | Contract bertipe, serializer dan pembacaan zona aman; manual terpilih dan Vitest PASS |
 | ✅ Phase 0C | `src/lib/seed.js` | Budi + linked history dan seed berulang lulus smoke test |
 | **NEW Phase 1** | `src/pages/relawan/PfaPage.jsx` | LOOK/LISTEN/LINK |
 | **NEW Phase 1** | `src/components/RedFlagFAB.jsx` | FAB + 3 verification gates |
@@ -583,4 +594,4 @@ Setiap prompt Codex harus menyertakan:
 - test/build/lint requirement;
 - instruksi memperbarui `docs/changes-notes.md` setelah task berhasil.
 
-**Next milestone:** Phase 1 — PFA LOOK/LISTEN/LINK dan Red Flag T0 sesuai alur yang direncanakan. Phase 0 source selesai dan smoke test manual prototipe saat ini PASS, termasuk refresh offline PWA produksi, sinkronisasi reconnect/startup, konflik cloud, dan demo Siti/Budi. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED** setelah reset data prototipe yang disengaja; kode migrasi tetap ada sebagai perlindungan kompatibilitas. Lanjutkan hardening Phase 0 hanya jika ditemukan defect baru.
+**Next milestone:** Phase 1B — UI dan konten protokol PFA LOOK/LISTEN/LINK. Phase 1A source, pemeriksaan manual terpilih, dan Vitest PASS; Phase 1 secara keseluruhan belum selesai dan belum ada suite E2E penuh. Red Flag/T0, sinkronisasi emergency, SRQ-20, Risk Factor, dan hasil T1/T2/T3 tetap pekerjaan berikutnya. Smoke test manual Phase 0 tetap PASS sebagaimana dicatat sebelumnya. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.

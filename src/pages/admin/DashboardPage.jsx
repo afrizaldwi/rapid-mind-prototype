@@ -11,6 +11,7 @@ import {
   Database,
 } from "lucide-react";
 import { seedDemoData } from "../../lib/seed";
+import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
 
 export default function DashboardPage() {
   const { userProfile } = useAuth();
@@ -44,7 +45,7 @@ export default function DashboardPage() {
 
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const zone = (data.zona || data.triageResult || "").toUpperCase();
+          const zone = getLegacyZone(data)?.toUpperCase() || null;
           if (zone === "MERAH") merah++;
           else if (zone === "KUNING") kuning++;
           else if (zone === "HIJAU") hijau++;
@@ -52,7 +53,8 @@ export default function DashboardPage() {
           allCases.push({
             id: doc.id,
             ...data,
-            zonaDisplay: zone || "HIJAU",
+            recordKind: getCaseRecordType(data),
+            zonaDisplay: zone,
             dateValue: data.createdAt?.toDate
               ? data.createdAt.toDate()
               : data.timestamp
@@ -130,7 +132,7 @@ export default function DashboardPage() {
             <Activity className="w-6 h-6 text-blue-600" />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Total Kasus</p>
+            <p className="text-sm font-medium text-slate-500">Total Catatan (semua jenis)</p>
             <h3 className="text-2xl font-bold text-slate-900">{stats.total}</h3>
           </div>
         </div>
@@ -219,7 +221,7 @@ export default function DashboardPage() {
                   <th className="px-4 py-3">Relawan</th>
                   <th className="px-4 py-3">Posko</th>
                   <th className="px-4 py-3">Jalur</th>
-                  <th className="px-4 py-3 rounded-r-lg">Zona</th>
+                  <th className="px-4 py-3 rounded-r-lg">Jenis / Zona</th>
                 </tr>
               </thead>
               <tbody>
@@ -241,9 +243,10 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-4 py-3">{c.poskoName || "-"}</td>
                     <td className="px-4 py-3">
-                      {c.jalur === "verbal" || c.type === "VERBAL"
-                        ? "Verbal"
-                        : "Non-Verbal"}
+                      {c.recordKind === 'legacy-triage'
+                        ? (c.jalur === "verbal" || c.type === "VERBAL" ? "Verbal" :
+                          c.jalur === 'nonverbal' || c.type === 'NON_VERBAL' ? 'Non-Verbal' : '-')
+                        : '-'}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -252,10 +255,13 @@ export default function DashboardPage() {
                             ? "bg-red-100 text-red-700"
                             : c.zonaDisplay === "KUNING"
                               ? "bg-amber-100 text-amber-700"
-                              : "bg-green-100 text-green-700"
+                              : c.zonaDisplay === "HIJAU"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-gray-100 text-gray-700"
                         }`}
                       >
-                        {c.zonaDisplay}
+                        {c.zonaDisplay || (c.recordKind === 'pfa' ? 'PFA' :
+                          c.recordKind === 'srq20' ? 'SRQ-20' : 'Tidak diketahui')}
                       </span>
                     </td>
                   </tr>

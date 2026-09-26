@@ -16,6 +16,7 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 import { useAssessment } from "../../hooks/useAssessment";
 import { localDb } from "../../lib/db";
+import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
 import { lookupPatient, registerPatient } from "../../lib/patients";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../lib/firebase";
@@ -37,6 +38,20 @@ const DEMO_PATIENTS = {
     jenisKelamin: "L",
   },
 };
+
+function historyBadge(record) {
+  const zone = getLegacyZone(record);
+  if (zone) return {
+    label: `Zona ${zone}`,
+    color: zone === 'merah' ? 'bg-red-100 text-red-700' :
+      zone === 'kuning' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700',
+  };
+  const type = getCaseRecordType(record);
+  return {
+    label: type === 'pfa' ? 'PFA' : type === 'srq20' ? 'SRQ-20' : 'Catatan tidak diketahui',
+    color: 'bg-gray-100 text-gray-700',
+  };
+}
 
 export default function PatientLookupPage() {
   const navigate = useNavigate();
@@ -336,18 +351,9 @@ export default function PatientLookupPage() {
                           : "—"}
                       </span>
                       <span
-                        className={`px-2 py-0.5 rounded-full font-bold ${
-                          (h.tier || h.zona) === "T0" || h.zona === "merah"
-                            ? "bg-red-100 text-red-700"
-                            : (h.tier || h.zona) === "T1"
-                              ? "bg-red-100 text-red-600"
-                              : (h.tier || h.zona) === "T2" ||
-                                  h.zona === "kuning"
-                                ? "bg-amber-100 text-amber-700"
-                                : "bg-green-100 text-green-700"
-                        }`}
+                        className={`px-2 py-0.5 rounded-full font-bold ${historyBadge(h).color}`}
                       >
-                        {h.tier || `Zona ${h.zona}`}
+                        {historyBadge(h).label}
                       </span>
                     </div>
                   ))}

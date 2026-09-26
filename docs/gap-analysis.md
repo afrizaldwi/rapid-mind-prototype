@@ -2,8 +2,8 @@
 
 > **Tanggal Pembaruan:** 26 September 2026  
 > **Ruang Lingkup:** Audit implementasi aktual terhadap `docs/workflow.md`, `docs/plan.md`, `docs/changes-notes.md`, dan source code pada snapshot proyek saat ini.  
-> **Status Keseluruhan:** **Source Phase 0A/0B/0C selesai dan smoke test manual Phase 0 untuk prototipe saat ini PASS; migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
-> **Milestone Saat Ini:** Phase 0 ditutup untuk prototipe saat ini; berikutnya Phase 1. Uraian gap lama di bawah diberi konteks historis.
+> **Status Keseluruhan:** **Phase 0A/0B/0C lulus smoke test manual yang tercatat. Phase 1A lulus pemeriksaan manual browser/runtime terpilih dan Vitest domain/sinkronisasi; belum full E2E. Migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
+> **Milestone Saat Ini:** Phase 1A fondasi persistensi bertipe selesai pada source, pemeriksaan manual terpilih, dan Vitest; berikutnya Phase 1B PFA UI/protokol. Phase 0 tetap ditutup. Uraian gap lama di bawah diberi konteks historis.
 
 ---
 
@@ -15,9 +15,11 @@ Phase 0A menambahkan assessment context yang menyimpan NIK pasien selama alur tr
 
 Tombol **Triase Baru** pada bottom navigation menuju `/relawan/patient-lookup`. Source Phase 0B menambahkan retry pasien dan kasus. Firebase, cache offline, startup/reconnect, dan alur demo telah lulus smoke test manual; migrasi v2 berisi data belum diuji runtime.
 
+Phase 1A menjadikan `cases` store rekam asesmen longitudinal bertipe (`recordType`, `protocolVersion`, `responses` ber-ID item stabil) tanpa menaikkan Dexie v4. PFA dapat disimpan sebagai record bertipe tanpa zona; pembaca legacy hanya mengenali zona yang valid. Sinkronisasi cloud seluruh kasus yang memiliki `patientNik` menunggu pasien aman/synced; record bertipe hanya mendapat lokasi jika pasangan koordinat diketahui dan valid. Pemeriksaan manual browser/runtime PASS untuk regresi simpan legacy verbal/non-verbal, PFA offline→reconnect/cloud tanpa zona/lokasi palsu, tampilan Relawan/Admin, dan eksklusi PFA dari agregat zona. Vitest PASS untuk kontrak record, serializer, urutan pasien→kasus, ID Firestore, dan koordinat; urutan pasien→kasus belum diklaim diuji manual di browser.
+
 ### Milestone berikutnya
 
-1. **Phase 1: PFA LOOK/LISTEN/LINK dan Red Flag T0.**
+1. **Phase 1B: PFA LOOK/LISTEN/LINK UI dan konten protokol.** Phase 1A lulus pemeriksaan manual terpilih dan Vitest; belum ada suite E2E penuh.
 2. Phase 2 berikutnya: SRQ-20 → Risk Factor → Result 4-tier.
 3. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED** sebagai batas validasi kompatibilitas; kode migrasi dipertahankan.
 
@@ -45,6 +47,7 @@ Tombol **Triase Baru** pada bottom navigation menuju `/relawan/patient-lookup`. 
 | 16 | **Screen 2 — Identitas Penyintas & Auto-Lookup** | `src/pages/relawan/PatientLookupPage.jsx` | Validasi NIK, local-first lookup, Firestore fallback, registrasi baru, tampilan riwayat, preset demo |
 | 17 | **Dexie v4 untuk data longitudinal** | `src/lib/db.js` | Baseline v4 bersih PASS; migrasi v2 berisi data → v4 NOT RUNTIME TESTED |
 | 18 | Entry point Home menuju Screen 2 | `src/pages/relawan/HomePage.jsx` | CTA “Mulai Triase Baru” sudah menuju `/relawan/patient-lookup` |
+| 19 | Fondasi `cases` bertipe/berversi (Phase 1A) | `src/lib/caseRecords.js`, `src/lib/sync.js`, pembaca Relawan/Admin | Source, pemeriksaan manual terpilih, dan Vitest PASS; belum full E2E |
 
 ---
 
@@ -88,7 +91,8 @@ Komentar lama “local is fine, will sync later” telah diganti oleh alur retry
 ### ⚠️ D. PFA (Psychological First Aid)
 
 - Saat ini hanya ada modal PFA statis di `ResultPage.jsx` untuk zona merah legacy.
-- Belum ada `PfaPage.jsx` dengan wizard **LOOK → LISTEN → LINK** dan penyimpanan status PFA ke pasien.
+- Fondasi record PFA bertipe sudah ada, tetapi belum ada `PfaPage.jsx` dengan wizard **LOOK → LISTEN → LINK**, konten protokol, atau aksi penyimpanan PFA dari UI.
+- Bukti PFA selesai harus berasal dari record PFA selesai, bukan `patients.pfaCompleted` / `lastPhase`; field pasien lama tetap kompatibilitas/demo.
 
 ### ⚠️ E. Triage Scoring
 
@@ -122,7 +126,7 @@ Komentar lama “local is fine, will sync later” telah diganti oleh alur retry
 
 - `PfaPage.jsx` belum ada.
 - Wizard LOOK / LISTEN / LINK belum ada.
-- Penyimpanan `pfaCompleted`, detail kebutuhan dasar, dan hasil PFA belum ada.
+- Penyimpanan hasil PFA dari UI dan detail kebutuhan dasar belum ada; `pfaCompleted` pada pasien bukan sumber kebenaran.
 - Routing pasien baru langsung ke PFA belum ada.
 
 ### Screen 4 — Red Flag Emergency / T0
@@ -286,7 +290,8 @@ Screen 2–7
 | **Selesai 0A** | Ubah bottom nav “Triase Baru” → `/relawan/patient-lookup` | Menutup bypass asesmen anonim |
 | **0B selesai; runtime PASS** | Patient offline sync + uniqueness strategy | Firebase/reconnect PASS; migrasi v2 berisi data belum diuji runtime |
 | **0C selesai; runtime PASS** | Seed patient demo baru/lama | Siti/Budi dan seed berulang PASS |
-| **P1** | PFA LOOK/LISTEN/LINK | Menyelesaikan jalur pasien baru |
+| **1A manual terpilih + Vitest PASS** | Record asesmen bertipe/berversi | PFA tidak menjadi Zona Hijau; urutan pasien→kasus teruji otomatis |
+| **P1B** | PFA LOOK/LISTEN/LINK | Menyelesaikan jalur pasien baru |
 | **P1** | Red Flag FAB + T0-Suspect | Menyelesaikan differentiator emergency workflow |
 | **P2** | SRQ-20 + Risk Factor + Result 4-tier | Menyelesaikan jalur longitudinal pasien lama |
 | **P3** | Role 2 Faskes real-time | Menutup loop T0-Suspect → validasi klinis |
@@ -303,4 +308,4 @@ Smoke test manual menemukan overlap header Relawan, kelemahan pemulihan profil s
 
 Data prototipe lama sengaja direset; `users` Firestore dipertahankan, sedangkan data pasien/kasus dan site data browser dibersihkan. Aplikasi dimulai dari Dexie v4 bersih lalu seed demo dijalankan ulang. Karena itu, migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi telah ditinjau dari source dan tetap menjadi perlindungan kompatibilitas.
 
-Phase 0 ditutup untuk prototipe saat ini. Milestone pengembangan langsung berikutnya adalah **Phase 1: PFA LOOK/LISTEN/LINK dan Red Flag T0**. Hardening Phase 0 dilanjutkan hanya bila defect baru ditemukan.
+Phase 0 ditutup untuk prototipe saat ini. Phase 1A fondasi record bertipe lulus pemeriksaan manual browser/runtime terpilih dan Vitest; suite E2E penuh belum ada. Milestone berikutnya adalah **Phase 1B: UI/protokol PFA LOOK/LISTEN/LINK**. Red Flag/T0, sinkronisasi emergency, SRQ-20, Risk Factor, dan hasil T1/T2/T3 masih belum diimplementasikan. Migrasi Dexie v2 berisi data → v4 tetap **NOT RUNTIME TESTED**.

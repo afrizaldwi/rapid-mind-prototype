@@ -17,6 +17,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { getLegacyZone } from "../../lib/caseRecords";
 
 export default function StatsPage() {
   const [loading, setLoading] = useState(true);
@@ -60,7 +61,8 @@ export default function StatsPage() {
 
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const zone = (data.zona || data.triageResult || "").toUpperCase();
+          const zone = getLegacyZone(data)?.toUpperCase();
+          if (!zone) return;
           const posko = data.poskoName || "Posko Utama";
 
           // Totals
@@ -71,8 +73,7 @@ export default function StatsPage() {
           // Posko Map
           if (!poskoMap[posko])
             poskoMap[posko] = { posko, MERAH: 0, KUNING: 0, HIJAU: 0 };
-          if (zone && poskoMap[posko][zone] !== undefined)
-            poskoMap[posko][zone]++;
+          poskoMap[posko][zone]++;
 
           // Date Map
           const docDate = data.createdAt?.toDate
@@ -85,7 +86,7 @@ export default function StatsPage() {
               day: "numeric",
               month: "short",
             });
-            if (dateMap[dateStr] && zone) {
+            if (dateMap[dateStr]) {
               dateMap[dateStr][zone]++;
             }
           }
@@ -138,7 +139,7 @@ export default function StatsPage() {
       {/* Overview stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-sm text-slate-500 mb-1">Total Kasus</p>
+          <p className="text-sm text-slate-500 mb-1">Total Catatan (semua jenis)</p>
           <div className="flex items-end gap-2">
             <h3 className="text-2xl font-bold text-slate-900">
               {stats.totalCases}

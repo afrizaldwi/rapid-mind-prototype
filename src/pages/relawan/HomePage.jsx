@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { localDb } from "../../lib/db";
+import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
 
 export default function HomePage() {
   const { user, userProfile } = useAuth();
@@ -35,9 +36,9 @@ export default function HomePage() {
           (c) => new Date(c.timestamp) >= today,
         );
         const newStats = {
-          merah: todaysCases.filter((c) => c.zona === "merah").length,
-          kuning: todaysCases.filter((c) => c.zona === "kuning").length,
-          hijau: todaysCases.filter((c) => c.zona === "hijau").length,
+          merah: todaysCases.filter((c) => getLegacyZone(c) === "merah").length,
+          kuning: todaysCases.filter((c) => getLegacyZone(c) === "kuning").length,
+          hijau: todaysCases.filter((c) => getLegacyZone(c) === "hijau").length,
         };
 
         setStats(newStats);
@@ -74,7 +75,7 @@ export default function HomePage() {
       case "hijau":
         return "Hijau";
       default:
-        return "Unknown";
+        return "Tidak diketahui";
     }
   };
 
@@ -120,7 +121,7 @@ export default function HomePage() {
       {/* Stats */}
       <div>
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
-          Statistik Hari Ini
+          Triase Legacy Hari Ini
         </h2>
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex flex-col items-center justify-center">
@@ -181,18 +182,21 @@ export default function HomePage() {
               >
                 <div>
                   <div
-                    className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${getZonaColor(caseItem.zona)} mb-1`}
+                    className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${getZonaColor(getLegacyZone(caseItem))} mb-1`}
                   >
-                    Zona {getZonaLabel(caseItem.zona)}
+                    {getCaseRecordType(caseItem) === 'legacy-triage'
+                      ? `Zona ${getZonaLabel(getLegacyZone(caseItem))}`
+                      : getCaseRecordType(caseItem) === 'pfa' ? 'PFA'
+                        : getCaseRecordType(caseItem) === 'srq20' ? 'SRQ-20' : 'Catatan tidak diketahui'}
                   </div>
-                  <div className="text-sm text-gray-600 flex items-center gap-1.5">
+                  {getCaseRecordType(caseItem) === 'legacy-triage' && <div className="text-sm text-gray-600 flex items-center gap-1.5">
                     <span className="capitalize">
                       Jalur{" "}
                       {caseItem.jalur === "verbal"
                         ? "A (Verbal)"
-                        : "B (Non-Verbal)"}
+                        : caseItem.jalur === "nonverbal" ? "B (Non-Verbal)" : "Tidak diketahui"}
                     </span>
-                  </div>
+                  </div>}
                 </div>
                 <div className="text-xs text-gray-400 font-medium">
                   {formatDate(caseItem.timestamp)}
