@@ -3,7 +3,7 @@
 > **Dokumen:** Implementation & Changelog Notes  
 > **Ruang Lingkup:** Track A — Poin 1 (Screen 2: Identitas Penyintas & Auto-Lookup System)  
 > **Tanggal:** 25 September 2026  
-> **Status:** Phase 0 source selesai dan smoke test browser terkonfirmasi; migrasi Dexie v2 berisi data belum diuji runtime. Phase 1 adalah milestone berikutnya.
+> **Status:** Phase 0 source selesai dan smoke test browser terkonfirmasi. Phase 1A source, pemeriksaan manual browser/runtime terpilih, dan Vitest PASS; Phase 1B berikutnya. Migrasi Dexie v2 berisi data belum diuji runtime.
 ---
 
 ## 1. Ringkasan Eksekutif
@@ -198,3 +198,16 @@ Data demo dan pengujian lokal/Firestore sengaja direset karena seluruh data prot
 Validasi reload offline formal menggunakan `npm run build`, `npm run preview`, Google Chrome, DevTools Network → Offline, lalu normal reload: **PASS**. Brave juga bekerja saat koneksi Wi-Fi/jaringan nyata dimatikan. Pada simulasi Offline di Brave DevTools, muncul `ERR_INTERNET_DISCONNECTED` meskipun service worker aktif dan Workbox precache terisi; ini dicatat sebagai caveat lingkungan pengujian, bukan kesimpulan umum tentang Brave. Tidak ada perubahan source PWA tambahan karena pengujian Chrome DevTools dan putus jaringan nyata di Brave berhasil.
 
 Phase 0 ditutup untuk prototipe saat ini. Milestone pengembangan berikutnya adalah Phase 1 (PFA LOOK/LISTEN/LINK dan Red Flag T0); migrasi legacy yang belum diuji tetap dicatat sebagai batas validasi, bukan hasil PASS.
+
+---
+
+## Phase 1A — Fondasi Persistensi Asesmen Bertipe (26 September 2026)
+
+- `cases` tetap menjadi store rekam asesmen longitudinal. `src/lib/caseRecords.js` mengenali `recordType: "legacy-triage" | "pfa" | "srq20"`, zona legacy yang valid, dan record lama tanpa tipe. Record tanpa zona valid atau bertipe tidak dikenal bersifat unknown, bukan Hijau. Record bertipe wajib mempunyai `protocolVersion` dan `responses` dengan ID item stabil; PFA tidak boleh membawa `zona`/`triageResult`.
+- `ResultPage` menandai simpanan triase baru sebagai `legacy-triage` versi `legacy-demo-v1`. `saveCaseLocally()` memvalidasi record sebelum menulis ke Dexie. Serializer Firestore hanya menulis `zona`/`triageResult` untuk legacy; PFA tidak otomatis menjadi Hijau. Untuk record bertipe, `location` hanya ditulis bila ada pasangan angka lintang/bujur yang valid, termasuk nilai nol; koordinat fallback demo hanya dipertahankan untuk legacy.
+- Jalur cloud kasus bersama kini memeriksa setiap `patientNik`. Pasien pending disinkronkan lebih dulu memakai helper pasien yang sudah ada; pasien conflict atau gagal sinkron membuat kasus tetap pending. Jika row pasien lokal tidak ada, helper pasien memerlukan konfirmasi cloud unik dari server. Kasus legacy tanpa `patientNik` tetap mengikuti jalur kompatibilitas. Alokasi `firestoreId` sebelum `setDoc()` dan retry ke ID yang sama dipertahankan.
+- Patient Lookup, Home, History, serta Dashboard/Cases/Stats/Map Admin membedakan PFA dari zona legacy. PFA dan record unknown diberi label netral dan tidak masuk hitungan zona merah/kuning/hijau atau marker peta zona. Detail PFA dasar menampilkan versi protokol dan pasangan ID respons/nilai.
+- Dexie tetap versi 4; migrasi v2→v4 tetap ada. `patients.pfaCompleted`/`lastPhase` tetap field kompatibilitas/demo, bukan sumber kebenaran PFA selesai. PFA selesai nantinya dibuktikan oleh record PFA selesai; Phase 1A tidak membuat draft atau UI PFA.
+- **Pemeriksaan manual browser/runtime Phase 1A — PASS:** simpan legacy verbal dan non-verbal; persistensi PFA bertipe saat offline dan sinkronisasi reconnect→cloud; PFA cloud tanpa `zona`/`triageResult` atau `location` palsu saat koordinat tidak ada; pembaca Relawan/Admin; PFA tidak masuk agregat zona merah/kuning/hijau. Hasil ini terpisah dari tes otomatis dan tidak membuktikan urutan pasien→kasus secara manual.
+- **Vitest Phase 1A — PASS:** `tests/caseRecords.test.js` dan `tests/sync.test.js` menguji validasi/klasifikasi bertipe, kompatibilitas legacy, serialisasi PFA/legacy, urutan pasien pending sebelum penulisan kasus, pemblokiran konflik/kegagalan pasien, konfirmasi cloud saat pasien lokal hilang, penggunaan ulang `firestoreId`, batas simpan lokal, serta lokasi bertipe termasuk nol. Semua Firebase, Dexie, dan helper pasien dimock; tidak ada akses cloud/IndexedDB nyata dan belum ada suite E2E penuh. `npm run lint`, `npm run build`, dan `git diff --check` lulus dengan warning yang tercatat. Migrasi Dexie v2 berisi data → v4 tetap **NOT RUNTIME TESTED**.
+- **Masih berikutnya:** Phase 1B UI dan konten protokol PFA LOOK/LISTEN/LINK. Red Flag/T0, sinkronisasi emergency, SRQ-20, Risk Factor, serta hasil T1/T2/T3 belum diimplementasikan; Phase 1 belum selesai.

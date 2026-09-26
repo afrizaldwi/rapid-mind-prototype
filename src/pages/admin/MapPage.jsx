@@ -4,6 +4,7 @@ import { db } from "../../lib/firebase";
 import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { Map as MapIcon } from "lucide-react";
+import { getLegacyZone } from "../../lib/caseRecords";
 
 // Dummy coordinates for poskos if not provided in DB
 const DUMMY_POSKOS = {
@@ -29,6 +30,8 @@ export default function MapPage() {
 
         querySnapshot.forEach((doc) => {
           const data = doc.data();
+          const zone = getLegacyZone(data)?.toUpperCase();
+          if (!zone) return;
           const posko = data.poskoName || "Posko Tidak Diketahui";
 
           if (!aggregated[posko]) {
@@ -52,7 +55,6 @@ export default function MapPage() {
             };
           }
 
-          const zone = (data.zona || data.triageResult || "").toUpperCase();
           if (zone === "MERAH") aggregated[posko].merah++;
           else if (zone === "KUNING") aggregated[posko].kuning++;
           else if (zone === "HIJAU") aggregated[posko].hijau++;

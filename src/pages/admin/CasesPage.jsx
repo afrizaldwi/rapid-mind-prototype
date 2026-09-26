@@ -2,6 +2,7 @@ import React, { useState, useEffect, Fragment } from "react";
 import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { ClipboardList, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
 
 export default function CasesPage() {
   const [cases, setCases] = useState([]);
@@ -21,11 +22,7 @@ export default function CasesPage() {
         const data = [];
         querySnapshot.forEach((doc) => {
           const item = doc.data();
-          const zone = (
-            item.zona ||
-            item.triageResult ||
-            "HIJAU"
-          ).toUpperCase();
+          const zone = getLegacyZone(item)?.toUpperCase() || null;
           const dateVal = item.createdAt?.toDate
             ? item.createdAt.toDate()
             : item.timestamp
@@ -34,6 +31,7 @@ export default function CasesPage() {
           data.push({
             id: doc.id,
             ...item,
+            recordKind: getCaseRecordType(item),
             zonaDisplay: zone,
             dateValue: dateVal,
           });
@@ -56,7 +54,7 @@ export default function CasesPage() {
   ];
 
   const filteredCases = cases.filter((c) => {
-    if (filterZona !== "SEMUA" && c.zonaDisplay !== filterZona) return false;
+    if (filterZona !== "SEMUA" && (c.recordKind !== 'legacy-triage' || c.zonaDisplay !== filterZona)) return false;
     if (filterPosko !== "SEMUA" && c.poskoName !== filterPosko) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -146,7 +144,7 @@ export default function CasesPage() {
                 <th className="px-6 py-4">Nama Relawan</th>
                 <th className="px-6 py-4">Posko</th>
                 <th className="px-6 py-4">Jalur</th>
-                <th className="px-6 py-4">Zona</th>
+                <th className="px-6 py-4">Jenis / Zona</th>
                 <th className="px-6 py-4">Detail</th>
               </tr>
             </thead>
@@ -168,9 +166,10 @@ export default function CasesPage() {
                     </td>
                     <td className="px-6 py-4">{c.poskoName || "-"}</td>
                     <td className="px-6 py-4">
-                      {c.jalur === "verbal" || c.type === "VERBAL"
-                        ? "Verbal"
-                        : "Non-Verbal"}
+                      {c.recordKind === 'legacy-triage'
+                        ? (c.jalur === "verbal" || c.type === "VERBAL" ? "Verbal" :
+                          c.jalur === 'nonverbal' || c.type === 'NON_VERBAL' ? 'Non-Verbal' : '-')
+                        : '-'}
                     </td>
                     <td className="px-6 py-4">
                       <span
@@ -179,10 +178,13 @@ export default function CasesPage() {
                             ? "bg-red-100 text-red-700"
                             : c.zonaDisplay === "KUNING"
                               ? "bg-amber-100 text-amber-700"
-                              : "bg-green-100 text-green-700"
+                            : c.zonaDisplay === "HIJAU"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-gray-100 text-gray-700"
                         }`}
                       >
-                        {c.zonaDisplay}
+                        {c.zonaDisplay || (c.recordKind === 'pfa' ? 'PFA' :
+                          c.recordKind === 'srq20' ? 'SRQ-20' : 'Tidak diketahui')}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -214,25 +216,43 @@ export default function CasesPage() {
                                 </span>{" "}
                                 {c.id}
                               </p>
-                              <p>
+                              {c.recordKind === 'legacy-triage' && <p>
                                 <span className="text-slate-500">
                                   Status PFA:
                                 </span>{" "}
                                 {c.needsPFA
                                   ? "Direkomendasikan PFA"
                                   : "Tidak perlu PFA"}
-                              </p>
+                              </p>}
+                              {c.recordKind === 'pfa' && <p>
+                                <span className="text-slate-500">Versi protokol:</span>{" "}
+                                {c.protocolVersion}
+                              </p>}
                               <p>
                                 <span className="text-slate-500">
-                                  Tersinkronisasi:
+                                  Sumber:
                                 </span>{" "}
-                                {c.synced ? "Ya" : "Tidak"}
+                                Firestore
                               </p>
                             </div>
                           </div>
 
                           <div>
-                            {c.jalur === "verbal" || c.type === "VERBAL" ? (
+                            {c.recordKind === 'pfa' ? (
+                              <>
+                                <h4 className="font-semibold text-slate-900 mb-2">Respons PFA</h4>
+                                <div className="space-y-1 text-sm">
+                                  {Object.entries(c.responses).map(([key, value]) => (
+                                    <div key={key} className="flex justify-between gap-3 border-b border-slate-200 py-1">
+                                      <span className="text-slate-600">{key}</span>
+                                      <span className="font-medium text-slate-900 text-right">{String(value)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            ) : c.recordKind !== 'legacy-triage' ? (
+                              <p className="text-sm text-slate-500">Detail catatan belum tersedia.</p>
+                            ) : c.jalur === "verbal" || c.type === "VERBAL" ? (
                               <>
                                 <h4 className="font-semibold text-slate-900 mb-2">
                                   Transkrip Percakapan

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Clock, CheckCircle, RefreshCw } from "lucide-react";
 import { localDb } from "../../lib/db";
 import { useAuth } from "../../hooks/useAuth";
+import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -56,7 +57,7 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="bg-white px-4 py-4 shadow-sm flex items-center justify-between">
-        <h1 className="text-lg font-bold text-gray-800">Riwayat Triase Saya</h1>
+        <h1 className="text-lg font-bold text-gray-800">Riwayat Asesmen Saya</h1>
         <button
           onClick={loadHistory}
           className="text-gray-500 hover:text-blue-600 p-1"
@@ -79,8 +80,7 @@ export default function HistoryPage() {
               Belum ada riwayat
             </h3>
             <p className="text-gray-500 text-sm">
-              Anda belum melakukan triase hari ini. Hasil triase yang Anda
-              lakukan akan muncul di sini.
+              Catatan asesmen yang Anda simpan akan muncul di sini.
             </p>
           </div>
         ) : (
@@ -92,9 +92,12 @@ export default function HistoryPage() {
               >
                 <div className="flex justify-between items-start mb-2">
                   <div
-                    className={`inline-flex px-2.5 py-1 rounded-md text-xs font-bold border uppercase ${getZonaConfig(item.zona)}`}
+                    className={`inline-flex px-2.5 py-1 rounded-md text-xs font-bold border uppercase ${getZonaConfig(getLegacyZone(item))}`}
                   >
-                    Zona {item.zona}
+                    {getCaseRecordType(item) === 'legacy-triage'
+                      ? `Zona ${getLegacyZone(item)}`
+                      : getCaseRecordType(item) === 'pfa' ? 'PFA'
+                        : getCaseRecordType(item) === 'srq20' ? 'SRQ-20' : 'Catatan tidak diketahui'}
                   </div>
                   {item.synced ? (
                     <div className="flex items-center gap-1 text-green-600 text-xs font-medium">
@@ -107,10 +110,10 @@ export default function HistoryPage() {
                   )}
                 </div>
 
-                <p className="text-sm font-medium text-gray-800 mb-1 capitalize">
+                {getCaseRecordType(item) === 'legacy-triage' && <p className="text-sm font-medium text-gray-800 mb-1 capitalize">
                   Metode: Jalur{" "}
-                  {item.jalur === "verbal" ? "A (Verbal)" : "B (Non-Verbal)"}
-                </p>
+                  {item.jalur === "verbal" ? "A (Verbal)" : item.jalur === "nonverbal" ? "B (Non-Verbal)" : "Tidak diketahui"}
+                </p>}
                 <p className="text-xs text-gray-500 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
                   {formatDate(item.timestamp)}

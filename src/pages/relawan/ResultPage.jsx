@@ -56,6 +56,8 @@ export default function ResultPage() {
         ? { zona, jalur, transcript, detectedKeywords, score }
         : { zona, jalur, criticalItems, warningItems, score, checklistAnswers };
       const caseData = {
+        recordType: "legacy-triage",
+        protocolVersion: "legacy-demo-v1",
         ...resultData,
         patientNik: patient.nik,
         patientName: patient.nama,
