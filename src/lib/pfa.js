@@ -10,6 +10,12 @@ export function hasCompletedPfa(history) {
   return Array.isArray(history) && history.some((record) => getCaseRecordType(record) === 'pfa');
 }
 
+export function getPfaProgressState({ history, cloudVerified, assessment, patientNik }) {
+  if (hasCompletedPfa(history)) return 'completed';
+  if (assessment?.patient?.nik === patientNik && assessment.phase === 'akut') return 'in-progress';
+  return cloudVerified === true ? 'incomplete' : 'unknown';
+}
+
 const isPlainObject = (value) => value !== null && typeof value === 'object' &&
   !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 

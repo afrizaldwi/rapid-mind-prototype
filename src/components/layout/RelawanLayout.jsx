@@ -4,6 +4,7 @@ import { Brain, Home, PlusCircle, ClipboardList, LogOut, WifiOff, CheckCircle } 
 import { useAuth } from '../../hooks/useAuth';
 import { useAssessment } from '../../hooks/useAssessment';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
+import { clearPfaDraft } from '../../lib/pfa';
 
 export default function RelawanLayout() {
   const { userProfile, logout } = useAuth();
@@ -43,6 +44,7 @@ export default function RelawanLayout() {
 
   const handleLogout = async () => {
     clearAssessment();
+    clearPfaDraft();
     await logout();
     navigate('/login');
   };

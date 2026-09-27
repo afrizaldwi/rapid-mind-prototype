@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PFA_PROTOCOL } from '../src/protocols/pfaProtocol.js';
-import { buildPfaCaseRecord, hasCompletedPfa, restorePfaDraft, validatePfaResponses } from '../src/lib/pfa.js';
+import { PFA_DRAFT_KEY, buildPfaCaseRecord, clearPfaDraft, getPfaProgressState, hasCompletedPfa, restorePfaDraft, validatePfaResponses } from '../src/lib/pfa.js';
 import { validateCaseForSave } from '../src/lib/caseRecords.js';
 import { pfaCaseRecordSchema } from '../src/schemas/caseRecord.js';
 
@@ -202,5 +202,47 @@ describe('completed PFA history', () => {
 
   it('finds a valid PFA among other history records', () => {
     expect(hasCompletedPfa([legacy, { recordType: 'unknown' }, { ...completed(), synced: 0 }])).toBe(true);
+  });
+});
+
+describe('PFA progress state', () => {
+  const completed = () => buildPfaCaseRecord(PFA_PROTOCOL, assessment, user, {}, completeResponses());
+  const legacy = { recordType: 'legacy-triage', zona: 'hijau', triageResult: 'HIJAU' };
+  const state = (overrides = {}) => getPfaProgressState({
+    history: [], cloudVerified: false, assessment: null, patientNik: assessment.patient.nik, ...overrides,
+  });
+
+  it('accepts valid local completion without cloud verification, including unsynced cases', () => {
+    expect(state({ history: [completed()] })).toBe('completed');
+    expect(state({ history: [{ ...completed(), synced: 0 }] })).toBe('completed');
+  });
+
+  it.each([false, true])('keeps the matching active acute PFA resumable when cloudVerified is %s', (cloudVerified) => {
+    expect(state({ assessment, cloudVerified })).toBe('in-progress');
+  });
+
+  it('requires verified absence before calling PFA incomplete', () => {
+    expect(state({ cloudVerified: true })).toBe('incomplete');
+    expect(state()).toBe('unknown');
+    expect(state({ history: [legacy], cloudVerified: true })).toBe('incomplete');
+    expect(state({ history: [legacy] })).toBe('unknown');
+  });
+
+  it('does not treat another patient’s active assessment as this patient’s progress', () => {
+    expect(state({ assessment, patientNik: '3201234567890002' })).toBe('unknown');
+    expect(state({ assessment, patientNik: '3201234567890002', cloudVerified: true })).toBe('incomplete');
+  });
+});
+
+describe('PFA draft cleanup', () => {
+  it('removes only the PFA draft session entry', () => {
+    const removeItem = vi.fn();
+    vi.stubGlobal('sessionStorage', { removeItem });
+    try {
+      clearPfaDraft();
+      expect(removeItem).toHaveBeenCalledExactlyOnceWith(PFA_DRAFT_KEY);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

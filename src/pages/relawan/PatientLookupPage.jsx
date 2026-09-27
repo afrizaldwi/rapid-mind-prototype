@@ -17,9 +17,9 @@ import { useAuth } from "../../hooks/useAuth";
 import { useAssessment } from "../../hooks/useAssessment";
 import { localDb } from "../../lib/db";
 import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
-import { clearPfaDraft, hasCompletedPfa } from "../../lib/pfa";
+import { clearPfaDraft, getPfaProgressState } from "../../lib/pfa";
 import { lookupPatient, registerPatient } from "../../lib/patients";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocsFromServer } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 // ───────────────────────────────────────────────
@@ -64,14 +64,19 @@ export default function PatientLookupPage() {
   const [usia, setUsia] = useState("");
   const [jenisKelamin, setJenisKelamin] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [lookupResult, setLookupResult] = useState(null); // null | { found: boolean, patient?, history? }
+  const [lookupResult, setLookupResult] = useState(null); // null | { found: boolean, patient?, history?, cloudVerified? }
   const [error, setError] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
 
   // ──────────── NIK validation ────────────
   const isNikValid = /^\d{16}$/.test(nik);
   const isFormComplete = isNikValid && nama.trim() && usia.trim() && jenisKelamin;
-  const pfaCompleted = lookupResult?.found && hasCompletedPfa(lookupResult.history);
+  const pfaProgress = lookupResult?.found ? getPfaProgressState({
+    history: lookupResult.history,
+    cloudVerified: lookupResult.cloudVerified,
+    assessment,
+    patientNik: lookupResult.patient.nik,
+  }) : null;
 
   const needsAbandonment = (targetNik, action) => {
     if (assessment && assessment.patient?.nik !== targetNik) {
@@ -83,18 +88,19 @@ export default function PatientLookupPage() {
 
   const loadHistory = async (patientNik) => {
     const localCases = await localDb.cases.where("patientNik").equals(patientNik).toArray();
-    if (!navigator.onLine) return localCases;
+    if (!navigator.onLine) return { history: localCases, cloudVerified: false };
     try {
-      const snapshot = await getDocs(query(collection(db, "cases"), where("patientNik", "==", patientNik)));
+      const snapshot = await getDocsFromServer(query(collection(db, "cases"), where("patientNik", "==", patientNik)));
       const localCloudIds = new Set(localCases.map((item) => item.firestoreId).filter(Boolean));
       const cloudCases = snapshot.docs.filter((item) => !localCloudIds.has(item.id)).map((item) => ({ id: item.id, ...item.data() }));
-      return [...localCases, ...cloudCases].sort((a, b) => {
+      const history = [...localCases, ...cloudCases].sort((a, b) => {
         const date = (item) => new Date(item.timestamp?.toDate?.() || item.timestamp || 0).getTime() || 0;
         return date(b) - date(a);
       });
+      return { history, cloudVerified: true };
     } catch (error) {
       console.error("Gagal memuat riwayat cloud:", error);
-      return localCases;
+      return { history: localCases, cloudVerified: false };
     }
   };
 
@@ -111,11 +117,12 @@ export default function PatientLookupPage() {
     try {
       const result = await lookupPatient(nik, navigator.onLine);
       if (result) {
-        const history = await loadHistory(nik);
+        const { history, cloudVerified } = await loadHistory(nik);
         setLookupResult({
           found: true,
           patient: result.patient,
           history,
+          cloudVerified,
           source: result.source,
         });
         setNama(result.patient.nama || nama);
@@ -152,8 +159,8 @@ export default function PatientLookupPage() {
     try {
       const result = await registerPatient(patientData, navigator.onLine);
       if (result.existing) {
-        const history = await loadHistory(nik);
-        setLookupResult({ found: true, patient: result.patient, history, source: "local" });
+        const { history, cloudVerified } = await loadHistory(nik);
+        setLookupResult({ found: true, patient: result.patient, history, cloudVerified, source: "local" });
         setError("NIK sudah terdaftar. Gunakan data pasien yang ditemukan.");
         return;
       }
@@ -170,10 +177,17 @@ export default function PatientLookupPage() {
     if (!lookupResult?.patient) return;
 
     const patient = lookupResult.patient;
+    const progress = getPfaProgressState({
+      history: lookupResult.history,
+      cloudVerified: lookupResult.cloudVerified,
+      assessment,
+      patientNik: patient.nik,
+    });
+    if (progress === 'unknown') return;
     if (!allowReplace && needsAbandonment(patient.nik, 'existing')) return;
 
     try {
-      if (hasCompletedPfa(lookupResult.history)) {
+      if (progress === 'completed') {
         startAssessment({
           patient,
           phase: "lanjutan",
@@ -181,6 +195,8 @@ export default function PatientLookupPage() {
         });
         // Falls back to triage until the dedicated SRQ-20 flow is built.
         navigate("/relawan/triage");
+      } else if (progress === 'in-progress') {
+        navigate("/relawan/pfa");
       } else {
         if (assessment?.patient?.nik !== patient.nik || assessment?.phase !== 'akut') {
           startAssessment({
@@ -321,7 +337,10 @@ export default function PatientLookupPage() {
                   Penyintas Ditemukan
                 </h3>
                 <p className="text-xs text-amber-600 mt-0.5">
-                  {pfaCompleted ? 'PFA telah selesai. Riwayat asesmen tersedia.' : 'PFA belum selesai. Lanjutkan asesmen fase akut.'}
+                  {pfaProgress === 'completed' ? 'PFA telah selesai. Riwayat asesmen tersedia.' :
+                    pfaProgress === 'in-progress' ? 'PFA belum selesai. Asesmen aktif dapat dilanjutkan.' :
+                    pfaProgress === 'incomplete' ? 'PFA belum selesai. Lanjutkan asesmen fase akut.' :
+                    'Status PFA belum dapat diverifikasi.'}
                 </p>
               </div>
             </div>
@@ -394,14 +413,24 @@ export default function PatientLookupPage() {
               </div>
             )}
 
-            {/* Action follows completed typed PFA history. */}
-            <button
-              onClick={() => handleProceedExisting()}
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              {pfaCompleted ? 'Lanjutkan ke Wawancara SRQ-20' : 'Lanjutkan PFA'}
-              <ChevronRight className="w-5 h-5" />
-            </button>
+            {pfaProgress === 'unknown' ? (
+              <div className="space-y-3">
+                <p className="text-sm text-amber-800">Riwayat cloud belum dapat diperiksa. Sambungkan internet lalu cari ulang agar status asesmen tidak salah.</p>
+                <button type="button" onClick={handleLookup} disabled={isSearching}
+                  className="w-full rounded-xl bg-amber-500 py-3 font-bold text-white disabled:opacity-50">
+                  {isSearching ? 'Mencari...' : 'Coba Lagi'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleProceedExisting()}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
+              >
+                {pfaProgress === 'completed' ? 'Lanjutkan ke Wawancara SRQ-20' :
+                  pfaProgress === 'in-progress' ? 'Lanjutkan PFA' : 'Mulai / Lanjutkan PFA'}
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            )}
           </div>
         )}
 
