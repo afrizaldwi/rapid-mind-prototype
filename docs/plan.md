@@ -2,7 +2,7 @@
 
 > **Dokumen:** Rencana Eksekusi & Implementasi Prototipe RAPID-MIND  
 > **Tanggal Pembaruan:** 27 September 2026
-> **Status:** **Phase 2B Screen 5/6 selesai untuk scope terpilih: source, tes otomatis, dan smoke test browser A–H PASS dengan keterbatasan akurasi Whisper lokal pada C. Screen 7/save/routing produksi masih Phase 2C. Phase 1C smoke test browser tetap PASS. Belum full E2E. Migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
+> **Status:** **Phase 2C source dan 216/216 tes otomatis selesai: routing produksi SRQ, Screen 7, simpan lokal lebih dulu, dan History lokal. Smoke test browser Phase 2C PENDING. Hasil manual Phase 0/1/2B tetap sebagaimana tercatat. Belum full E2E. Migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
 > **Target:** Prototipe demo end-to-end tanpa *dead end*, mencakup alur Relawan, Faskes/PSC 119, dan Admin BPBD/Dinkes.
 
 ---
@@ -17,14 +17,14 @@
 | Phase 1A: `cases` bertipe/berversi | ✅/⚠️ | Source, pemeriksaan manual browser/runtime terpilih, dan Vitest PASS; belum full E2E |
 | Offline `patients` dan `cases` + reconnect sync | ✅ | Startup/reconnect pasien dan pasien baru offline → reconnect lulus smoke test manual |
 | Dashboard Admin dasar | ✅ | Snapshot `getDocs`, belum real-time |
-| **Screen 2 Patient Lookup** | ✅/⚠️ | UI, NIK lookup, register, history sudah ada; integrasi downstream belum utuh |
+| **Screen 2 Patient Lookup** | ✅/⚠️ | Cabang PFA selesai sudah menuju SRQ; integrasi browser Phase 2C belum diuji |
 | Dexie v4 `patients` + `emergencies` | ✅/⚠️ | Baseline v4 bersih PASS; migrasi v2 berisi data → v4 NOT RUNTIME TESTED |
 | PFA LOOK/LISTEN/LINK | ✅/⚠️ | Selesai untuk scope terpilih: source, 78/78 tes otomatis, smoke test percabangan, dan retest pre-merge PASS; belum full E2E |
 | `/relawan/history` lintas browser | ⚠️ | History membaca Dexie lokal; hidrasi kasus Firestore lintas browser belum tersedia |
 | Red Flag T0-Suspect (Phase 1C) | ✅/⚠️ | Source, tes otomatis, dan smoke test browser PASS; Faskes T0 belum ada |
 | SRQ-20 | ✅/⚠️ | Screen 5 verbal/nonverbal dan smoke browser terpilih PASS; akurasi Whisper lokal terbatas; label masih template |
-| Risk Factor + Gangguan Fungsi | ✅/⚠️ | Screen 6 dan cek kesiapan smoke browser PASS; save masih Phase 2C dan aturan adjustment belum ada |
-| Result 4-tier | ❌ | Masih merah/kuning/hijau |
+| Risk Factor + Gangguan Fungsi | ✅/⚠️ | Screen 6 menuju Screen 7 pada source; aturan adjustment belum ada |
+| Hasil SRQ T1/T2/T3 | ✅/⚠️ | Screen 7 dan save typed case tersedia; browser Phase 2C pending. T0 tetap Red Flag terpisah |
 | Role 2 Faskes | ❌ | Belum ada |
 | Admin real-time/longitudinal | ❌ | Belum ada |
 
@@ -91,8 +91,10 @@ cases (rekam asesmen longitudinal)
 ├── PFA: { recordType:"pfa", protocolVersion, patientNik, phase:"akut",
 │          responses:{ [itemId]: nilai }, relawanId, poskoName,
 │          timestamp, synced, firestoreId }
-└── SRQ-20 nanti: { recordType:"srq20", protocolVersion, patientNik,
-                   phase:"lanjutan", responses, tier, timestamp, synced, firestoreId }
+└── SRQ-20: { recordType:"srq20", protocolVersion, patientNik,
+              phase:"lanjutan", responses, inputMode, srq20Score, baseTier,
+              riskFunctionProtocolVersion, riskFactors, functionalImpairment,
+              classificationVersion, tier, timestamp, synced, firestoreId }
 
 emergencies
 └── { patientNik, relawanId, poskoName, lat, lng,
@@ -231,7 +233,7 @@ Tiga tahap:
 - **LINK:** kebutuhan dasar, keluarga, shelter, obat, akses layanan.
 
 Implementasi Phase 1B:
-- Pasien baru masuk `/relawan/pfa` dari Patient Lookup. Pasien terdaftar hanya menuju fallback triase legacy jika riwayat memiliki record PFA bertipe valid; tanpa bukti tersebut, pasien melanjutkan PFA akut hanya saat asesmen akut NIK yang sama aktif atau ketiadaan PFA telah diverifikasi melalui cloud. Rute PFA dijaga assessment context dan asesmen `lanjutan` dialihkan ke triase legacy tanpa menghapus konteks.
+- Pada akhir Phase 1B, pasien baru masuk `/relawan/pfa` dari Patient Lookup dan PFA selesai memakai fallback triase legacy. Phase 2C mengganti target `lanjutan` menjadi SRQ-20; aturan bukti PFA bertipe valid, verifikasi riwayat cloud, dan lanjut asesmen akut tetap berlaku.
 - Definisi protokol LOOK/LISTEN/LINK memakai versi `pfa-prototype-v1`, ID respons stabil, dan teks Indonesia yang **provisional**, bukan protokol klinis final. Boolean wajib harus dijawab eksplisit `true` atau `false`.
 - Draf belum selesai hanya berada di `sessionStorage` dan terikat pasien, sesi asesmen, serta versi protokol. Draf tidak ditulis ke `cases`. Pencarian ulang NIK yang sama melanjutkan asesmen akut aktif tanpa mengganti sesi; asesmen pasien lain memerlukan pembatalan eksplisit. Pasien yang ditinggalkan tetap terdaftar dan PFA belum selesai.
 - Logout Relawan menghapus asesmen aktif dan draf PFA sesi, sambil mempertahankan pasien terdaftar, kasus selesai, dan data pending sync; login ulang tidak memulihkan draf yang ditinggalkan. Patient Lookup membedakan riwayat cloud yang berhasil dicek dari status tidak terverifikasi (offline atau kueri server gagal). Record PFA lokal valid tetap membuktikan selesai, termasuk `synced: 0`; asesmen akut aktif untuk NIK yang sama tetap dapat dilanjutkan offline dengan sesi/jawaban semula. Tanpa keduanya, hanya riwayat cloud terverifikasi yang boleh memulai PFA baru. Status belum terverifikasi hanya menawarkan `Coba Lagi`, tanpa aksi PFA atau fallback lanjutan dan tanpa membatalkan asesmen pasien lain. Retest browser perbaikan ini **PASS**.
@@ -277,12 +279,13 @@ Implementasi Phase 1B:
 - Dua layar dijaga asesmen `lanjutan` milik UID aktif, menyembunyikan bottom navigation, dan mempertahankan FAB Red Flag. Logout/pembatalan pasien lain menghapus draf. Patient Lookup dengan PFA selesai tetap menuju triase legacy.
 - **Validasi otomatis/unit:** 194/194 tes (9 file) mencakup jawaban eksplisit, mode dan transisi yang menjaga data, draf sesi valid untuk Screen 6, kesiapan penuh, versi tidak didukung, dan klasifikasi v1 tanpa adjustment. **Manual browser smoke:** delapan skenario kelompok A–H dalam `docs/changes-notes.md` sudah dilakukan: A, B, D, E, F, G, H **PASS**; C **PASS WITH LIMITATION**. Izin/rekaman mikrofon, STT browser, playback, dan runtime Whisper berjalan, tetapi transkripsi Whisper lokal untuk kalimat uji tidak akurat. Whisper hanya bantuan opsional dan tidak mengisi jawaban SRQ. Screen 6 tidak membuat kasus SRQ baru; record yang sudah ada tetap PFA. Belum ada suite E2E penuh.
 
-### 2C — Hasil dan save flow (belum dikerjakan)
+### 2C — Hasil dan save flow (source dan tes otomatis selesai; browser pending)
 
-- Bangun Screen 7 dan penyimpanan record lengkap, lalu pindahkan routing pasien lama dari fallback triase legacy. Sampai itu selesai, ResultPage dan alur merah/kuning/hijau tetap aktif.
-- Ganti label template setelah isi protokol disepakati; adjustment Screen 6 tetap **NOT DEFINED / NOT IMPLEMENTED** dan memerlukan keputusan protokol tersendiri. V1 tetap `finalTier === baseTier`.
+- Patient Lookup dengan PFA bertipe selesai kini memulai atau melanjutkan konteks `lanjutan` di `/relawan/srq20`. Screen 6 menyimpan draf raw lengkap lalu menuju `/relawan/srq20/result`; hasil dihitung ulang dari draf terikat sesi, termasuk setelah refresh. Draf Risk/Function valid namun belum lengkap kembali ke Screen 6; draf malformed tetap fail-closed. Red Flag FAB tetap tersedia.
+- Builder SRQ selesai memakai validasi domain yang sudah ada, menulis jawaban lengkap, versi, skor, base tier, tier akhir, serta snapshot terverifikasi. Posko hanya dari profil Relawan non-kosong yang bukan fallback demo; koordinat hanya dari pasangan angka valid profil, termasuk nol. `saveCase()` menyimpan lokal lebih dulu; `synced: false` tetap sukses lokal, sehingga draf dihapus dan asesmen dibersihkan setelah navigasi Home. Kegagalan lokal mempertahankan draf untuk retry. History lokal menampilkan tier/skor/mode; triase legacy tetap dapat dipakai eksplisit.
+- `npm test` **216/216 PASS** (9 file); lint/build PASS dengan warning baseline. Smoke browser Phase 2C A–J pada `docs/changes-notes.md` **PENDING**. Label template dan adjustment Screen 6 tetap **NOT DEFINED / NOT IMPLEMENTED**; v1 tetap `finalTier === baseTier`.
 
-**Gate Phase 2:** pasien lama dapat menjalani `lookup → SRQ-20 → Risk/Function → T1/T2/T3 → save → history lookup` dengan NIK konsisten. Gate ini **belum tercapai** oleh 2B; smoke browser terpilih Screen 5/6 sudah selesai, tetapi Screen 7/save dan routing produksi masih Phase 2C, serta belum ada suite E2E penuh.
+**Gate Phase 2:** alur `lookup → SRQ-20 → Risk/Function → T1/T2/T3 → save → History lokal` sudah terhubung dalam source dan tes otomatis; verifikasi browser Phase 2C masih pending. Belum ada suite E2E penuh.
 
 ---
 
@@ -448,9 +451,9 @@ Lalu jalankan semua scenario demo pada browser normal + simulated offline.
 | ✅/⚠️ Phase 1C | `src/components/RedFlagFAB.jsx` | FAB + 3 indikator provisional; smoke test browser Phase 1C PASS |
 | ✅ Phase 2A | `src/protocols/srq20Protocol.js` | 20 definisi butir template ber-ID stabil |
 | ✅/⚠️ Phase 2B | `src/pages/relawan/Srq20Page.jsx` | SRQ-20 + dua mode input + STT assist; smoke browser PASS dengan limitasi akurasi Whisper |
-| ✅/⚠️ Phase 2B | `src/pages/relawan/RiskFactorPage.jsx` | Dua bagian checklist dan cek kesiapan; smoke browser PASS, tanpa save kasus SRQ |
-| ✅/⚠️ Phase 2A | `src/lib/scoring.js`, `src/lib/classification.js` | SRQ base tier dan kontrak klasifikasi v1 tersedia; UI hasil dan adjustment Screen 6 belum ada |
-| ⚠️ Phase 2 | `src/pages/relawan/ResultPage.jsx` | Migrate to patient-linked 4-tier result |
+| ✅/⚠️ Phase 2C | `src/pages/relawan/RiskFactorPage.jsx`, `src/pages/relawan/LongitudinalResultPage.jsx` | Screen 6→7 dan hasil/save tersedia; browser Phase 2C pending |
+| ✅/⚠️ Phase 2C | `src/lib/scoring.js`, `src/lib/classification.js` | Hasil T1/T2/T3 tampil; adjustment Risk/Function belum didefinisikan |
+| ✅ Legacy | `src/pages/relawan/ResultPage.jsx` | Hasil zona legacy tetap tersedia pada rute triase eksplisit |
 | **NEW Phase 3** | `src/components/layout/FaskesLayout.jsx` | Role 2 shell |
 | **NEW Phase 3** | `src/pages/faskes/EmergencyQueuePage.jsx` | Real-time queue + validation |
 | ⚠️ Phase 3 | `src/contexts/AuthContext.jsx` | Add nakes helpers/profile behavior |
@@ -481,10 +484,10 @@ Lalu jalankan semua scenario demo pada browser normal + simulated offline.
 
 1. Pilih preset pasien lama.
 2. Lookup menemukan pasien dan history.
-3. Pada Phase 2B, lookup masih menuju triase legacy; untuk uji Screen 5/6, buka `/relawan/srq20` langsung dengan konteks `lanjutan` valid.
+3. Lookup PFA selesai menuju `/relawan/srq20` dengan konteks `lanjutan` valid; verifikasi browser Phase 2C masih pending.
 4. Gunakan STT/Whisper sebagai bantuan transkrip, lalu pilih jawaban Ya/Tidak secara manual; pastikan pergantian mode mempertahankan jawaban.
-5. Isi 20 SRQ dan delapan butir Risk/Function; pastikan Screen 6 hanya menyatakan draf siap dan tetap di tempat. **Smoke browser Phase 2B terpilih PASS; Whisper lokal memiliki keterbatasan akurasi transkripsi.**
-6. Phase 2C: hasil T1/T2/T3, save, lalu lookup NIK yang sama dan lihat riwayat baru.
+5. Isi 20 SRQ dan delapan butir Risk/Function; Screen 6 menuju Screen 7. **Smoke browser Phase 2B terpilih PASS untuk perilaku saat itu; Whisper lokal memiliki keterbatasan akurasi transkripsi. Perubahan Phase 2C belum diuji browser.**
+6. Periksa hasil T1/T2/T3, simpan, lalu lookup NIK yang sama dan lihat riwayat lokal baru.
 
 ### Scenario C — T0 Two-Tiered Emergency
 
@@ -544,4 +547,4 @@ Setiap prompt Codex harus menyertakan:
 - test/build/lint requirement;
 - instruksi memperbarui `docs/changes-notes.md` setelah task berhasil.
 
-**Status terkini:** Phase 2A menyediakan fondasi domain, dan Phase 2B menambahkan Screen 5/6 beserta rute dan draf terikat sesi. `npm test` 194/194 PASS (9 file); smoke browser Phase 2B A, B, D, E, F, G, H **PASS**, C **PASS WITH LIMITATION** karena akurasi transkripsi Whisper lokal belum memadai pada kalimat uji. Phase 2B selesai untuk scope terpilih. Patient Lookup tetap memakai fallback triase legacy setelah PFA selesai. Screen 7, hasil/save, dan routing produksi SRQ masih Phase 2C; adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED**. Phase 1C Red Flag/T0-Suspect tetap memiliki smoke test browser **PASS** dari tahap sebelumnya. Hasil manual Phase 0 dan validasi terpilih Phase 1A/1B tetap sebagaimana tercatat sebelumnya. Belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Faskes validasi T0 dan hasil T1/T2/T3 masih pekerjaan berikutnya. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.
+**Status terkini:** Phase 2C source dan tes otomatis menyelesaikan routing produksi, Screen 7, record SRQ typed/local-first, dan tampilan History lokal; `npm test` **216/216 PASS** (9 file). Smoke browser Phase 2C A–J **PENDING**. Smoke browser Phase 2B A, B, D, E, F, G, H tetap **PASS**, C **PASS WITH LIMITATION** karena akurasi Whisper lokal. Adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED**. Phase 1C Red Flag/T0-Suspect tetap memiliki smoke test browser **PASS** dari tahap sebelumnya. Belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Faskes validasi T0 tetap Phase 3; wording protokol/klinis masih provisional. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.

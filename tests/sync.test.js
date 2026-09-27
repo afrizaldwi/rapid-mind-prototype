@@ -85,6 +85,9 @@ import {
   syncPendingCases,
   syncPendingData,
 } from "../src/lib/sync.js";
+import { buildSrq20CaseRecord } from "../src/lib/longitudinalAssessment.js";
+import { SRQ20_PROTOCOL } from "../src/protocols/srq20Protocol.js";
+import { RISK_FUNCTION_PROTOCOL } from "../src/protocols/riskFunctionProtocol.js";
 
 const nik = "3201234567890001";
 const pfa = (overrides = {}) => ({
@@ -246,6 +249,39 @@ describe("patient-first case cloud write", () => {
 });
 
 describe("case serialization and retry", () => {
+  it("saves and uploads a completed typed SRQ case without legacy fields or fabricated location", async () => {
+    const assessment = {
+      relawanId: "relawan-123",
+      patient: { nik, nama: "Siti", usia: 34, jenisKelamin: "P", poskoName: "Posko Utama - Kota" },
+      phase: "lanjutan", previousHistory: [], isNewPatient: false,
+      startedAt: "2026-09-27T10:00:00.000Z",
+    };
+    const progress = {
+      relawanId: assessment.relawanId, patientNik: nik, assessmentStartedAt: assessment.startedAt,
+      srqProtocolVersion: SRQ20_PROTOCOL.version,
+      riskFunctionProtocolVersion: RISK_FUNCTION_PROTOCOL.version,
+      inputMode: "nonverbal", currentStep: "risk-function",
+      srqResponses: Object.fromEntries(SRQ20_PROTOCOL.items.map(({ id }, index) => [id, index < 6])),
+      riskFactors: Object.fromEntries(RISK_FUNCTION_PROTOCOL.sections[0].items.map(({ id }) => [id, false])),
+      functionalImpairment: Object.fromEntries(RISK_FUNCTION_PROTOCOL.sections[1].items.map(({ id }) => [id, false])),
+    };
+    const record = buildSrq20CaseRecord(progress, assessment, { uid: assessment.relawanId }, { name: "Rina" });
+    const localId = await saveCaseLocally(record);
+    expect(state.rows.get(localId)).toMatchObject({ recordType: "srq20", synced: 0, firestoreId: null });
+
+    await pushCaseToFirestore(state.rows.get(localId));
+    expect(payload()).toMatchObject({
+      recordType: "srq20", phase: "lanjutan", protocolVersion: SRQ20_PROTOCOL.version,
+      responses: progress.srqResponses, inputMode: "nonverbal", srq20Score: 6, baseTier: "T2",
+      riskFunctionProtocolVersion: RISK_FUNCTION_PROTOCOL.version,
+      riskFactors: progress.riskFactors, functionalImpairment: progress.functionalImpairment,
+      classificationVersion: "classification-prototype-v1", tier: "T2",
+    });
+    for (const field of ["zona", "triageResult", "location", "poskoName", "riskFactorScore"]) {
+      expect(payload()).not.toHaveProperty(field);
+    }
+  });
+
   it("keeps typed PFA fields and omits zones and fabricated location", async () => {
     await pushCaseToFirestore(pending());
     expect(payload()).toMatchObject({

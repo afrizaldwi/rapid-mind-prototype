@@ -40,7 +40,7 @@ export default function PfaPage() {
   const saveLock = useRef(false);
 
   if (!assessment || !patient) return <Navigate to="/relawan/patient-lookup" replace />;
-  if (assessment.phase !== 'akut') return <Navigate to="/relawan/triage" replace />;
+  if (assessment.phase !== 'akut') return <Navigate to="/relawan/srq20" replace />;
 
   const sectionIndex = PFA_PROTOCOL.sections.findIndex((section) => section.id === sectionId);
   const section = PFA_PROTOCOL.sections[sectionIndex];

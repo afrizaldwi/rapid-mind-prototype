@@ -18,7 +18,6 @@ function RiskFactorAssessment({ assessment, patient, userUid }) {
   const [errors, setErrors] = useState({ riskFactors: {}, functionalImpairment: {} });
   const [pageError, setPageError] = useState('');
   const [storageWarning, setStorageWarning] = useState(false);
-  const [ready, setReady] = useState(false);
   const srqComplete = canEnterRiskFunction(initial, assessment, userUid);
 
   const persist = useCallback((next) => {
@@ -49,7 +48,6 @@ function RiskFactorAssessment({ assessment, patient, userUid }) {
     progressRef.current = next;
     setProgress(next);
     persist(next);
-    setReady(false);
     setPageError('');
     setErrors((current) => {
       const sectionErrors = { ...current[sectionKey] };
@@ -71,29 +69,25 @@ function RiskFactorAssessment({ assessment, patient, userUid }) {
     const readiness = checkPhase2BReadiness(current);
     if (readiness.reason === 'risk-function') {
       setErrors(readiness.errors);
-      setReady(false);
       setPageError('Lengkapi semua jawaban Faktor Risiko dan Gangguan Fungsi.');
       return;
     }
     if (readiness.reason === 'srq20') {
-      setReady(false);
       setPageError('Jawaban SRQ-20 belum lengkap. Kembali ke Screen 5 untuk melengkapinya.');
       return;
     }
 
     if (!readiness.ready) {
-      setReady(false);
       setPageError('Data asesmen belum dapat diverifikasi. Periksa kembali semua jawaban.');
       return;
     }
     if (!persist({ ...current, currentStep: 'risk-function' })) {
-      setReady(false);
       setPageError('Draf lengkap belum dapat disimpan. Coba lagi.');
       return;
     }
     setErrors({ riskFactors: {}, functionalImpairment: {} });
     setPageError('');
-    setReady(true);
+    navigate('/relawan/srq20/result');
   };
 
   const answered = countRiskFunctionAnswers(progress);
@@ -114,9 +108,6 @@ function RiskFactorAssessment({ assessment, patient, userUid }) {
           Draf tidak dapat disimpan di tab ini. Jawaban dapat hilang jika halaman dimuat ulang.
         </p>}
         {pageError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{pageError}</p>}
-        {ready && <p role="status" className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          Data asesmen lengkap dan siap diproses ke hasil.
-        </p>}
         <div className="flex justify-end">
           <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{answered} / 8 dijawab</span>
         </div>
@@ -143,7 +134,7 @@ function RiskFactorAssessment({ assessment, patient, userUid }) {
           </button>
           <button type="button" onClick={handleComplete}
             className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white">
-            Periksa kelengkapan
+            Lihat Hasil Asesmen
           </button>
         </div>
       </div>

@@ -20,6 +20,7 @@ export default function RelawanLayout() {
   const isAssessmentPath = location.pathname === '/relawan/patient-lookup' ||
                            location.pathname === '/relawan/pfa' ||
                            location.pathname === '/relawan/srq20' ||
+                           location.pathname === '/relawan/srq20/result' ||
                            location.pathname === '/relawan/risk-factor' ||
                            location.pathname === '/relawan/triage' ||
                            location.pathname.startsWith('/relawan/triage/');
@@ -27,6 +28,7 @@ export default function RelawanLayout() {
                       location.pathname === '/relawan/patient-lookup' ||
                       location.pathname === '/relawan/pfa' ||
                       location.pathname === '/relawan/srq20' ||
+                      location.pathname === '/relawan/srq20/result' ||
                       location.pathname === '/relawan/risk-factor' ||
                       location.pathname === '/relawan/triage' ||
                       location.pathname === '/relawan/triage/verbal' ||
@@ -39,6 +41,7 @@ export default function RelawanLayout() {
                         location.pathname.includes('/triage/result') ||
                         location.pathname === '/relawan/pfa' ||
                         location.pathname === '/relawan/srq20' ||
+                        location.pathname === '/relawan/srq20/result' ||
                         location.pathname === '/relawan/risk-factor' ||
                         location.pathname.includes('/patient-lookup');
 
