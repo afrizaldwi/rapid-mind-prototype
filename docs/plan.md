@@ -2,7 +2,7 @@
 
 > **Dokumen:** Rencana Eksekusi & Implementasi Prototipe RAPID-MIND  
 > **Tanggal Pembaruan:** 27 September 2026
-> **Status:** **Phase 0A/0B/0C dan validasi terpilih Phase 1A/1B tetap PASS. Phase 1C Red Flag/T0-Suspect source, 93/93 tes otomatis, dan smoke test browser PASS. Belum full E2E. Migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
+> **Status:** **Phase 2B Screen 5/6 selesai untuk scope terpilih: source, tes otomatis, dan smoke test browser A–H PASS dengan keterbatasan akurasi Whisper lokal pada C. Screen 7/save/routing produksi masih Phase 2C. Phase 1C smoke test browser tetap PASS. Belum full E2E. Migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
 > **Target:** Prototipe demo end-to-end tanpa *dead end*, mencakup alur Relawan, Faskes/PSC 119, dan Admin BPBD/Dinkes.
 
 ---
@@ -22,8 +22,8 @@
 | PFA LOOK/LISTEN/LINK | ✅/⚠️ | Selesai untuk scope terpilih: source, 78/78 tes otomatis, smoke test percabangan, dan retest pre-merge PASS; belum full E2E |
 | `/relawan/history` lintas browser | ⚠️ | History membaca Dexie lokal; hidrasi kasus Firestore lintas browser belum tersedia |
 | Red Flag T0-Suspect (Phase 1C) | ✅/⚠️ | Source, tes otomatis, dan smoke test browser PASS; Faskes T0 belum ada |
-| SRQ-20 | ❌ | Belum ada page/question module |
-| Risk Factor | ❌ | Belum ada page |
+| SRQ-20 | ✅/⚠️ | Screen 5 verbal/nonverbal dan smoke browser terpilih PASS; akurasi Whisper lokal terbatas; label masih template |
+| Risk Factor + Gangguan Fungsi | ✅/⚠️ | Screen 6 dan cek kesiapan smoke browser PASS; save masih Phase 2C dan aturan adjustment belum ada |
 | Result 4-tier | ❌ | Masih merah/kuning/hijau |
 | Role 2 Faskes | ❌ | Belum ada |
 | Admin real-time/longitudinal | ❌ | Belum ada |
@@ -50,8 +50,8 @@ Phase 0A menutup putusnya patient context dan bypass bottom nav. Source Phase 0B
 2. **NIK adalah identitas pasien lintas penyimpanan.** Assessment dan case memakai `patientNik`; ID Dexie dan ID dokumen Firestore hanya detail penyimpanan.
 3. **Jangan mengandalkan route state sebagai satu-satunya sumber identitas.** Route state boleh digunakan untuk UX, tetapi active assessment context harus bertahan jika user pindah sub-route/refresh ringan.
 4. **Offline-first berlaku pada entitas penting, bukan hanya `cases`.** Minimal `patients`, assessment/cases, dan emergency event harus memiliki mekanisme retry/sync yang eksplisit.
-5. **SRQ-20 prototype modular.** 20 butir ditempatkan di `src/lib/srq20Questions.js` agar konten dapat diganti tanpa mengubah komponen. Konten/cut-off dalam demo mengikuti spesifikasi proyek dan harus diperlakukan sebagai **prototype requirement**, bukan klaim validasi klinis dari source code.
-6. **Human-in-the-loop.** STT/NLP hanya membantu prefill/auto-check; relawan tetap dapat mengoreksi semua jawaban sebelum submit.
+5. **SRQ-20 prototype modular.** 20 butir ber-ID stabil berada di `src/protocols/srq20Protocol.js`; teksnya `[Template]` dan dapat diganti tanpa mengubah validasi. Cut-off T3 0–5, T2 6–10, T1 11–20 berasal dari `docs/workflow.md` sebagai **prototype requirement**, bukan klaim validasi klinis dari source code.
+6. **Human-in-the-loop.** Pada protokol template Phase 2B, STT/Whisper hanya membantu transkrip sementara; Relawan mengisi semua jawaban Ya/Tidak secara manual. Auto-check memerlukan pemetaan klinis yang belum disepakati.
 7. **Role 2 dibuat simplified tetapi stateful.** Fokus pada queue T0-Suspect, simulasi Tele-Emergency, confirm/downgrade, dan tracking status.
 8. **Real-time menggunakan Firestore `onSnapshot`.** Tidak perlu Cloud Functions/FCM untuk demo awal; Browser Notification + audio chime cukup untuk simulasi command center.
 9. **Jangan polish sebelum core loop selesai.** Heatmap kontinu, export, dan animasi berada setelah flow Relawan → Faskes → Admin terhubung.
@@ -263,71 +263,26 @@ Implementasi Phase 1B:
 
 ## Phase 2 — Longitudinal Flow: SRQ-20 + Risk + Result 4-Tier
 
-### 2.1 Structured questions module
+### 2A — Domain foundation (source dan tes otomatis selesai)
 
-**New:** `src/lib/srq20Questions.js`
+- `srq20-prototype-v1` berisi tepat 20 butir berurutan `srq20.01`–`srq20.20`; `risk-function-prototype-v1` berisi masing-masing empat butir Faktor Risiko dan Gangguan Fungsi. Semua label masih `[Template]` dan **provisional**, bukan bunyi/indikator klinis final.
+- Validator domain menerima jawaban boolean parsial untuk draf dan meminta seluruh butir untuk penyelesaian. Satu draf Screen 5+6 di `rapidMind.longitudinalDraft` terikat UID Relawan, NIK, sesi asesmen, fase lanjutan, dan versi protokol aktif; mode verbal/nonverbal menghasilkan bentuk jawaban SRQ yang sama. Belum ada penyimpanan audio/transkrip.
+- `analyzeSrq20()` menghasilkan skor dan base tier T1/T2/T3 dari ambang prototipe `workflow.md`. `calculateFinalTier()` memerlukan checklist Screen 6 lengkap, tetapi algoritme adjustment Screen 6 **NOT DEFINED / NOT IMPLEMENTED**; `classification-prototype-v1` sengaja menghasilkan `finalTier === baseTier`, tanpa bobot atau skor faktor risiko. T0-Suspect tetap mekanisme Red Flag terpisah.
+- Record SRQ selesai memerlukan metadata, jawaban lengkap, skor/base tier yang cocok dengan jawaban, dan `tier` sesuai versi klasifikasinya. Validasi memakai versi yang tersimpan pada record dan menolak versi yang belum didukung; validitas v1 tidak bergantung pada versi protokol aktif di masa depan. Dexie tetap v4.
 
-- 20 item modular.
-- `id`, `question`, optional `helperText`, optional keyword mapping untuk prototype STT assist.
-- Jangan hard-code copy pertanyaan di component.
+### 2B — UI Screen 5/6 (selesai untuk scope terpilih; smoke browser PASS dengan limitasi Whisper)
 
-### 2.2 `Srq20Page.jsx` — Screen 5
+- `/relawan/srq20` merender 20 butir protokol dengan mode verbal/nonverbal atas satu objek jawaban. Tidak dijawab berbeda dari `false`; STT dan Whisper hanya membantu transkrip sementara, tanpa pemetaan otomatis ke jawaban. Draf sesi memulihkan mode dan jawaban.
+- `/relawan/risk-factor` menuntut SRQ lengkap, lalu merender Faktor Risiko dan Gangguan Fungsi terpisah. Delapan jawaban eksplisit dan SRQ lengkap diperiksa lagi sebelum draf siap; halaman tetap di Screen 6 tanpa save case atau tier yang ditampilkan.
+- Dua layar dijaga asesmen `lanjutan` milik UID aktif, menyembunyikan bottom navigation, dan mempertahankan FAB Red Flag. Logout/pembatalan pasien lain menghapus draf. Patient Lookup dengan PFA selesai tetap menuju triase legacy.
+- **Validasi otomatis/unit:** 194/194 tes (9 file) mencakup jawaban eksplisit, mode dan transisi yang menjaga data, draf sesi valid untuk Screen 6, kesiapan penuh, versi tidak didukung, dan klasifikasi v1 tanpa adjustment. **Manual browser smoke:** delapan skenario kelompok A–H dalam `docs/changes-notes.md` sudah dilakukan: A, B, D, E, F, G, H **PASS**; C **PASS WITH LIMITATION**. Izin/rekaman mikrofon, STT browser, playback, dan runtime Whisper berjalan, tetapi transkripsi Whisper lokal untuk kalimat uji tidak akurat. Whisper hanya bantuan opsional dan tidak mengisi jawaban SRQ. Screen 6 tidak membuat kasus SRQ baru; record yang sudah ada tetap PFA. Belum ada suite E2E penuh.
 
-Requirements:
-- Membaca active patient context.
-- 20 jawaban terstruktur.
-- Verbal STT sebagai bantuan input.
-- Non-verbal/manual interaction sesuai scope prototype.
-- Auto-check hanyalah suggestion.
-- Relawan dapat override setiap jawaban.
-- Tooltip/panduan per item.
-- Progress indicator dan score preview.
+### 2C — Hasil dan save flow (belum dikerjakan)
 
-### 2.3 `RiskFactorPage.jsx` — Screen 6
+- Bangun Screen 7 dan penyimpanan record lengkap, lalu pindahkan routing pasien lama dari fallback triase legacy. Sampai itu selesai, ResultPage dan alur merah/kuning/hijau tetap aktif.
+- Ganti label template setelah isi protokol disepakati; adjustment Screen 6 tetap **NOT DEFINED / NOT IMPLEMENTED** dan memerlukan keputusan protokol tersendiri. V1 tetap `finalTier === baseTier`.
 
-- 6–8 indikator fungsi/risiko sesuai spesifikasi proyek.
-- Menyimpan data terstruktur, bukan hanya total score.
-- Output diteruskan ke final classification.
-
-### 2.4 Unified scoring engine
-
-**Modify:** `src/lib/scoring.js`
-
-Tambahkan API baru tanpa langsung merusak fungsi legacy:
-
-```js
-analyzeSrq20(answers)
-calculateFinalTier({ srqScore, riskFactors, isRedFlag })
-```
-
-Target output:
-- T0 jika emergency override aktif.
-- T1/T2/T3 mengikuti rule prototype pada `workflow.md`.
-
-Legacy `analyzeTranscript()` / `analyzeChecklist()` dapat dipertahankan sementara sampai seluruh route baru stabil, kemudian dideprecate.
-
-### 2.5 Result 4-tier — Screen 7
-
-**Modify:** `src/pages/relawan/ResultPage.jsx` atau buat route baru lalu migrasikan.
-
-Persist minimal:
-
-```js
-{
-  patientNik,
-  phase,
-  srq20Score,
-  answers,
-  riskFactors,
-  riskFactorScore,
-  tier,
-  relawanId,
-  poskoName,
-  timestamp
-}
-```
-
-**Gate Phase 2:** pasien lama dapat menjalani `lookup → SRQ-20 → risk factor → T1/T2/T3 → save → history lookup` dengan NIK tetap konsisten.
+**Gate Phase 2:** pasien lama dapat menjalani `lookup → SRQ-20 → Risk/Function → T1/T2/T3 → save → history lookup` dengan NIK konsisten. Gate ini **belum tercapai** oleh 2B; smoke browser terpilih Screen 5/6 sudah selesai, tetapi Screen 7/save dan routing produksi masih Phase 2C, serta belum ada suite E2E penuh.
 
 ---
 
@@ -491,10 +446,10 @@ Lalu jalankan semua scenario demo pada browser normal + simulated offline.
 | ✅ Phase 0C | `src/lib/seed.js` | Budi + linked history dan seed berulang lulus smoke test |
 | ✅ Phase 1B terpilih | `src/pages/relawan/PfaPage.jsx`, `src/pages/relawan/PatientLookupPage.jsx` | LOOK/LISTEN/LINK; 78/78 tes otomatis, smoke test percabangan, dan retest pre-merge PASS; belum full E2E |
 | ✅/⚠️ Phase 1C | `src/components/RedFlagFAB.jsx` | FAB + 3 indikator provisional; smoke test browser Phase 1C PASS |
-| **NEW Phase 2** | `src/lib/srq20Questions.js` | Structured question definitions |
-| **NEW Phase 2** | `src/pages/relawan/Srq20Page.jsx` | SRQ-20 + STT assist |
-| **NEW Phase 2** | `src/pages/relawan/RiskFactorPage.jsx` | Risk/function evaluation |
-| ⚠️ Phase 2 | `src/lib/scoring.js` | Add 4-tier API; deprecate legacy later |
+| ✅ Phase 2A | `src/protocols/srq20Protocol.js` | 20 definisi butir template ber-ID stabil |
+| ✅/⚠️ Phase 2B | `src/pages/relawan/Srq20Page.jsx` | SRQ-20 + dua mode input + STT assist; smoke browser PASS dengan limitasi akurasi Whisper |
+| ✅/⚠️ Phase 2B | `src/pages/relawan/RiskFactorPage.jsx` | Dua bagian checklist dan cek kesiapan; smoke browser PASS, tanpa save kasus SRQ |
+| ✅/⚠️ Phase 2A | `src/lib/scoring.js`, `src/lib/classification.js` | SRQ base tier dan kontrak klasifikasi v1 tersedia; UI hasil dan adjustment Screen 6 belum ada |
 | ⚠️ Phase 2 | `src/pages/relawan/ResultPage.jsx` | Migrate to patient-linked 4-tier result |
 | **NEW Phase 3** | `src/components/layout/FaskesLayout.jsx` | Role 2 shell |
 | **NEW Phase 3** | `src/pages/faskes/EmergencyQueuePage.jsx` | Real-time queue + validation |
@@ -526,13 +481,10 @@ Lalu jalankan semua scenario demo pada browser normal + simulated offline.
 
 1. Pilih preset pasien lama.
 2. Lookup menemukan pasien dan history.
-3. Masuk SRQ-20.
-4. Gunakan STT untuk membantu input satu atau beberapa item.
-5. Override manual salah satu auto-check.
-6. Isi Risk Factor.
-7. Result T1/T2/T3.
-8. Save.
-9. Lookup NIK yang sama kembali dan pastikan assessment baru muncul pada history.
+3. Pada Phase 2B, lookup masih menuju triase legacy; untuk uji Screen 5/6, buka `/relawan/srq20` langsung dengan konteks `lanjutan` valid.
+4. Gunakan STT/Whisper sebagai bantuan transkrip, lalu pilih jawaban Ya/Tidak secara manual; pastikan pergantian mode mempertahankan jawaban.
+5. Isi 20 SRQ dan delapan butir Risk/Function; pastikan Screen 6 hanya menyatakan draf siap dan tetap di tempat. **Smoke browser Phase 2B terpilih PASS; Whisper lokal memiliki keterbatasan akurasi transkripsi.**
+6. Phase 2C: hasil T1/T2/T3, save, lalu lookup NIK yang sama dan lihat riwayat baru.
 
 ### Scenario C — T0 Two-Tiered Emergency
 
@@ -592,4 +544,4 @@ Setiap prompt Codex harus menyertakan:
 - test/build/lint requirement;
 - instruksi memperbarui `docs/changes-notes.md` setelah task berhasil.
 
-**Status terkini:** Phase 1C Red Flag/T0-Suspect telah diimplementasikan; 93/93 tes otomatis dan smoke test browser Phase 1C **PASS**. Hasil manual Phase 0 dan validasi terpilih Phase 1A/1B tetap sebagaimana tercatat sebelumnya. Smoke test Phase 1C mencakup alur emergency offline/reconnect tersendiri; belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Faskes validasi T0, SRQ-20, Risk Factor, dan hasil T1/T2/T3 tetap fase berikutnya. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.
+**Status terkini:** Phase 2A menyediakan fondasi domain, dan Phase 2B menambahkan Screen 5/6 beserta rute dan draf terikat sesi. `npm test` 194/194 PASS (9 file); smoke browser Phase 2B A, B, D, E, F, G, H **PASS**, C **PASS WITH LIMITATION** karena akurasi transkripsi Whisper lokal belum memadai pada kalimat uji. Phase 2B selesai untuk scope terpilih. Patient Lookup tetap memakai fallback triase legacy setelah PFA selesai. Screen 7, hasil/save, dan routing produksi SRQ masih Phase 2C; adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED**. Phase 1C Red Flag/T0-Suspect tetap memiliki smoke test browser **PASS** dari tahap sebelumnya. Hasil manual Phase 0 dan validasi terpilih Phase 1A/1B tetap sebagaimana tercatat sebelumnya. Belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Faskes validasi T0 dan hasil T1/T2/T3 masih pekerjaan berikutnya. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.

@@ -18,6 +18,7 @@ import { useAssessment } from "../../hooks/useAssessment";
 import { localDb } from "../../lib/db";
 import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
 import { clearPfaDraft, getPfaProgressState } from "../../lib/pfa";
+import { clearLongitudinalDraft } from "../../lib/longitudinalAssessment";
 import { lookupPatient, registerPatient } from "../../lib/patients";
 import { collection, query, where, getDocsFromServer } from "firebase/firestore";
 import { db } from "../../lib/firebase";
@@ -219,6 +220,7 @@ export default function PatientLookupPage() {
     setPendingAction(null);
     clearAssessment();
     clearPfaDraft();
+    clearLongitudinalDraft();
     if (action === 'register') void handleRegisterAndProceed(true);
     if (action === 'existing') handleProceedExisting(true);
   };

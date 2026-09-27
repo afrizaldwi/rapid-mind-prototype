@@ -32,4 +32,13 @@ export const pfaCaseRecordSchema = baseTypedCaseRecordSchema.safeExtend({
 export const srq20CaseRecordSchema = baseTypedCaseRecordSchema.safeExtend({
   recordType: z.literal("srq20"),
   phase: z.literal("lanjutan"),
+  responses: z.record(canonicalIdentifierSchema, z.boolean()),
+  inputMode: z.enum(["verbal", "nonverbal"]),
+  srq20Score: z.number().int().min(0).max(20),
+  baseTier: z.enum(["T1", "T2", "T3"]),
+  riskFunctionProtocolVersion: canonicalIdentifierSchema,
+  riskFactors: z.record(canonicalIdentifierSchema, z.boolean()),
+  functionalImpairment: z.record(canonicalIdentifierSchema, z.boolean()),
+  classificationVersion: canonicalIdentifierSchema,
+  tier: z.enum(["T1", "T2", "T3"]),
 });

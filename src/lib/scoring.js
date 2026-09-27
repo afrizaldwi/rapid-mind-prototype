@@ -1,4 +1,20 @@
 import { ZONA_MERAH_KEYWORDS, ZONA_KUNING_KEYWORDS } from './keywords'
+import { validateSrq20Responses } from './srq20.js'
+import { SRQ20_PROTOCOL } from '../protocols/srq20Protocol.js'
+
+export function analyzeSrq20(responses, { protocolVersion = SRQ20_PROTOCOL.version } = {}) {
+  const validation = validateSrq20Responses(responses, { protocolVersion, requireComplete: true })
+  if (!validation.valid) throw new Error('Respons SRQ-20 lengkap tidak valid.')
+
+  // Thresholds for each supported version remain stable for historical records.
+  switch (protocolVersion) {
+    case 'srq20-prototype-v1': {
+      const score = Object.values(validation.normalizedResponses).filter((answer) => answer === true).length
+      return { score, baseTier: score <= 5 ? 'T3' : score <= 10 ? 'T2' : 'T1' }
+    }
+    default: throw new Error('Versi scoring SRQ-20 tidak didukung.')
+  }
+}
 
 /**
  * Analisis transkripsi verbal dan tentukan zona risiko
