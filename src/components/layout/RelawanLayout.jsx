@@ -5,12 +5,13 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAssessment } from '../../hooks/useAssessment';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { clearPfaDraft } from '../../lib/pfa';
+import RedFlagFAB from '../RedFlagFAB';
 
 export default function RelawanLayout() {
   const { userProfile, logout } = useAuth();
   const { assessment, clearAssessment } = useAssessment();
   const assessmentStartedAt = assessment?.startedAt;
-  const { isOnline, pendingCount, conflictCount, lastSyncResult } = useOfflineSync();
+  const { isOnline, pendingCount, conflictCount, lastSyncResult, updatePendingCount } = useOfflineSync();
   const isOffline = !isOnline;
   const location = useLocation();
   const navigate = useNavigate();
@@ -19,6 +20,13 @@ export default function RelawanLayout() {
                            location.pathname === '/relawan/pfa' ||
                            location.pathname === '/relawan/triage' ||
                            location.pathname.startsWith('/relawan/triage/');
+  const showRedFlag = location.pathname === '/relawan' ||
+                      location.pathname === '/relawan/patient-lookup' ||
+                      location.pathname === '/relawan/pfa' ||
+                      location.pathname === '/relawan/triage' ||
+                      location.pathname === '/relawan/triage/verbal' ||
+                      location.pathname === '/relawan/triage/nonverbal' ||
+                      location.pathname === '/relawan/triage/result';
   
   // Determine if bottom nav should be hidden (on triage sub-pages that have their own action buttons)
   const hideBottomNav = location.pathname.includes('/triage/verbal') || 
@@ -91,9 +99,11 @@ export default function RelawanLayout() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-md mx-auto relative">
+      <main className={`flex-1 w-full max-w-md mx-auto relative ${showRedFlag ? 'pb-40' : ''}`}>
         <Outlet />
       </main>
+
+      {showRedFlag && <RedFlagFAB onSaved={updatePendingCount} />}
 
       {/* Bottom Navigation — hidden on triage sub-pages */}
       {!hideBottomNav && (

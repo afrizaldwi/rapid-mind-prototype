@@ -35,6 +35,8 @@ const state = vi.hoisted(() => {
     findCloudPatientByNik: vi.fn(),
     pushPatientToFirestore: vi.fn(),
     syncPendingPatients: vi.fn(),
+    syncPendingEmergencies: vi.fn(),
+    emergencyPending: 0,
   };
 });
 
@@ -59,8 +61,14 @@ vi.mock("../src/lib/db.js", () => ({
     patientConflicts: {
       where: () => ({ equals: () => ({ toArray: async () => [] }) }),
     },
+    emergencies: {
+      where: () => ({ equals: () => ({ count: async () => state.emergencyPending }) }),
+    },
     transaction: async (_mode, _table, action) => action(),
   },
+}));
+vi.mock("../src/lib/emergencies.js", () => ({
+  syncPendingEmergencies: state.syncPendingEmergencies,
 }));
 vi.mock("../src/lib/patients.js", () => ({
   findLocalPatientByNik: state.findLocalPatientByNik,
@@ -71,6 +79,8 @@ vi.mock("../src/lib/patients.js", () => ({
 
 import {
   pushCaseToFirestore,
+  getSyncCounts,
+  isSyncComplete,
   saveCaseLocally,
   syncPendingCases,
   syncPendingData,
@@ -102,6 +112,7 @@ const payload = () => state.setDoc.mock.calls[0][1];
 
 beforeEach(() => {
   state.reset();
+  state.emergencyPending = 0;
   vi.clearAllMocks();
   state.findLocalPatientByNik.mockResolvedValue({ nik, syncStatus: "synced" });
   state.findCloudPatientByNik.mockResolvedValue(null);
@@ -109,6 +120,7 @@ beforeEach(() => {
     patient: { nik, syncStatus: "synced" },
   });
   state.syncPendingPatients.mockResolvedValue({ synced: 0, failed: 0 });
+  state.syncPendingEmergencies.mockResolvedValue({ synced: 0, failed: 0 });
 });
 
 describe("local case save boundary", () => {
@@ -314,11 +326,51 @@ describe("case serialization and retry", () => {
 });
 
 describe("batch sync", () => {
-  it("runs the patient batch before the case batch", async () => {
+  it("runs patient, emergency, then case batches", async () => {
     pending();
     await syncPendingData();
     expect(state.syncPendingPatients.mock.invocationCallOrder[0]).toBeLessThan(
+      state.syncPendingEmergencies.mock.invocationCallOrder[0],
+    );
+    expect(state.syncPendingEmergencies.mock.invocationCallOrder[0]).toBeLessThan(
       state.setDoc.mock.invocationCallOrder[0],
     );
+  });
+
+  it("still attempts emergencies after a patient batch failure", async () => {
+    state.syncPendingPatients.mockRejectedValueOnce(new Error('patient directory unavailable'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await syncPendingData();
+      expect(result.patients.failed).toBe(1);
+      expect(state.syncPendingEmergencies).toHaveBeenCalledOnce();
+      expect(result.emergencies).toEqual({ synced: 0, failed: 0 });
+      expect(isSyncComplete(result, result.remaining)).toBe(false);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("does not let a patient conflict suppress emergency sync or linked-case gating", async () => {
+    state.syncPendingPatients.mockResolvedValueOnce({ synced: 0, failed: 0, conflicts: 1 });
+    state.syncPendingEmergencies.mockResolvedValueOnce({ synced: 1, failed: 0 });
+    state.findLocalPatientByNik.mockRejectedValueOnce(new Error('patient conflict'));
+    pending();
+    const result = await syncPendingData();
+    expect(result.emergencies.synced).toBe(1);
+    expect(result.cases.failed).toBe(1);
+    expect(state.setDoc).not.toHaveBeenCalled();
+  });
+
+  it("includes emergency rows in pending totals and completion status", async () => {
+    state.emergencyPending = 2;
+    const counts = await getSyncCounts();
+    expect(counts).toEqual({ patients: 0, cases: 0, emergencies: 2, pending: 2, conflicts: 0 });
+    const result = await syncPendingData();
+    expect(result.remaining).toEqual(counts);
+    expect(isSyncComplete(result, counts)).toBe(false);
+    expect(isSyncComplete({ ...result, emergencies: { synced: 0, failed: 1 } },
+      { ...counts, emergencies: 0, pending: 0 })).toBe(false);
+    expect(isSyncComplete(result, { ...counts, emergencies: 0, pending: 0 })).toBe(true);
   });
 });

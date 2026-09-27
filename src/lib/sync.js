@@ -3,21 +3,28 @@ import { db } from "./firebase";
 import localDb from "./db";
 import { findCloudPatientByNik, findLocalPatientByNik, pushPatientToFirestore, syncPendingPatients } from "./patients";
 import { getCaseRecordType, getLegacyZone, validateCaseForSave } from "./caseRecords";
+import { syncPendingEmergencies } from "./emergencies";
 
 const caseWrites = new Map();
 let aggregateRun = null;
 
 export async function getSyncCounts() {
-  const [patients, cases, activeConflicts, localConflicts] = await Promise.all([
+  const [patients, cases, emergencies, activeConflicts, localConflicts] = await Promise.all([
     localDb.patients.where("syncStatus").equals("pending").count(),
     localDb.cases.where("synced").equals(0).count(),
+    localDb.emergencies.where("synced").equals(0).count(),
     localDb.patients.where("syncStatus").equals("conflict").toArray(),
     localDb.patientConflicts.where("status").equals("unresolved").toArray(),
   ]);
   // Count each NIK once even when both an active row and audit record describe it.
   const groups = new Set(activeConflicts.map((row) => row.nik));
   for (const row of localConflicts) groups.add(row.nik || `invalid:${row.auditId}`);
-  return { patients, cases, pending: patients + cases, conflicts: groups.size };
+  return { patients, cases, emergencies, pending: patients + cases + emergencies, conflicts: groups.size };
+}
+
+export function isSyncComplete(result, counts) {
+  return !!counts && counts.pending === 0 && counts.conflicts === 0 &&
+    result.patients.failed === 0 && result.emergencies.failed === 0 && result.cases.failed === 0;
 }
 
 /**
@@ -167,10 +174,24 @@ export async function syncPendingCases() {
 export function syncPendingData() {
   if (aggregateRun) return aggregateRun;
   aggregateRun = (async () => {
-    const patients = await syncPendingPatients();
+    let patients;
+    try {
+      patients = await syncPendingPatients();
+    } catch (error) {
+      // Emergency dispatch is independent of patient-directory readiness.
+      console.error("Gagal sinkronisasi pasien:", error);
+      patients = { synced: 0, failed: 1, conflicts: 0 };
+    }
+    let emergencies;
+    try {
+      emergencies = await syncPendingEmergencies();
+    } catch (error) {
+      console.error("Gagal sinkronisasi Red Flag:", error);
+      emergencies = { synced: 0, failed: 1 };
+    }
     const cases = await syncPendingCases();
     const remaining = await getSyncCounts();
-    return { patients, cases, remaining };
+    return { patients, emergencies, cases, remaining };
   })().finally(() => { aggregateRun = null; });
   return aggregateRun;
 }

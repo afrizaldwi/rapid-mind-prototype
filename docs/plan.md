@@ -2,7 +2,7 @@
 
 > **Dokumen:** Rencana Eksekusi & Implementasi Prototipe RAPID-MIND  
 > **Tanggal Pembaruan:** 27 September 2026
-> **Status:** **Phase 0A/0B/0C selesai dan smoke test browser Phase 0 terkonfirmasi. Phase 1A fondasi persistensi bertipe lulus pemeriksaan manual terpilih. Phase 1B selesai untuk scope prototipe terpilih: source, 78/78 tes otomatis, smoke test percabangan, dan retest pre-merge logout/verifikasi riwayat cloud PASS. Belum full E2E. Migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
+> **Status:** **Phase 0A/0B/0C dan validasi terpilih Phase 1A/1B tetap PASS. Phase 1C Red Flag/T0-Suspect source, 93/93 tes otomatis, dan smoke test browser PASS. Belum full E2E. Migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
 > **Target:** Prototipe demo end-to-end tanpa *dead end*, mencakup alur Relawan, Faskes/PSC 119, dan Admin BPBD/Dinkes.
 
 ---
@@ -21,7 +21,7 @@
 | Dexie v4 `patients` + `emergencies` | ✅/⚠️ | Baseline v4 bersih PASS; migrasi v2 berisi data → v4 NOT RUNTIME TESTED |
 | PFA LOOK/LISTEN/LINK | ✅/⚠️ | Selesai untuk scope terpilih: source, 78/78 tes otomatis, smoke test percabangan, dan retest pre-merge PASS; belum full E2E |
 | `/relawan/history` lintas browser | ⚠️ | History membaca Dexie lokal; hidrasi kasus Firestore lintas browser belum tersedia |
-| Red Flag T0 | ❌ | Belum ada component/flow |
+| Red Flag T0-Suspect (Phase 1C) | ✅/⚠️ | Source, tes otomatis, dan smoke test browser PASS; Faskes T0 belum ada |
 | SRQ-20 | ❌ | Belum ada page/question module |
 | Risk Factor | ❌ | Belum ada page |
 | Result 4-tier | ❌ | Masih merah/kuning/hijau |
@@ -243,27 +243,21 @@ Implementasi Phase 1B:
 
 ### 1.2 Persistent Red Flag FAB (`RedFlagFAB.jsx` — Screen 4 trigger)
 
-**New:** `src/components/RedFlagFAB.jsx`
+**Status Phase 1C:** source, 93/93 tes otomatis, dan smoke test browser **PASS**; belum ada suite E2E penuh.
 
-Requirements:
-- Dipasang di `RelawanLayout.jsx` pada screen relevan.
-- Tidak tampil di login/admin/faskes.
-- 3 Verification Gate.
-- Minimal satu gate sebelum submit.
-- Membaca patient context jika tersedia.
-- Membuat event `T0-Suspect` local-first.
-- Menyimpan posko/location yang diketahui, bukan random GPS palsu.
-- T0 tidak bergantung pada skor SRQ-20.
+- `RedFlagFAB.jsx` dipasang di `RelawanLayout` pada Home, Patient Lookup, PFA, dan halaman triase legacy; tidak tampil pada History atau rute non-Relawan. Modal tidak mengubah halaman/asesmen/draf PFA saat dibuka, ditutup, atau setelah simpan emergency.
+- `redflag-prototype-v1` mendefinisikan tepat tiga indikator provisional dengan ID stabil. Minimal satu pilihan menghasilkan event `t0-suspect` terpisah dari `cases`, termasuk tanpa asesmen pasien aktif.
+- Snapshot pasien hanya dari asesmen aktif milik UID Relawan. Posko dan pasangan koordinat hanya dari profil Relawan bila valid; koordinat fallback/random legacy tidak dipakai. Event tidak dihitung sebagai tier kasus atau hasil scoring SRQ-20.
 
 ### 1.3 Emergency sync contract
 
-**Modify:** `src/lib/sync.js`
+**Status Phase 1C:** source, 93/93 tes otomatis, dan validasi browser manual **PASS**; belum ada suite E2E penuh.
 
-- `emergencies` harus mengikuti pola local-first + retry.
-- Ketika online, push ke Firestore `emergencies`.
-- Status update dari Faskes harus dapat direfleksikan pada UI yang relevan.
-
-**Gate Phase 1:** demo pasien baru dapat menjalankan PFA, dan Red Flag dari flow relawan menghasilkan T0-Suspect persistence tanpa dead end.
+- `emergencies` Dexie v4 menyimpan event tervalidasi lebih dulu dengan `synced: 0`. UI segera menunjukkan simpan lokal, kemudian memantau Promise upload yang dimulai saat online; gagal cloud tetap pending, gagal lokal mempertahankan form untuk retry.
+- Serializer eksplisit menulis field event ke Firestore `emergencies`, dengan waktu event sebagai Firestore Timestamp tanpa ID lokal/status sync. `firestoreId` tersimpan sebelum `setDoc()` dan dipakai ulang saat retry; panggilan bersamaan untuk record yang sama digabung.
+- Satu lifecycle sinkronisasi memproses pasien → emergency → kasus. Emergency tidak menunggu kesiapan direktori pasien; kasus terkait NIK tetap menunggu pasien aman/synced. Pending count dan hasil `complete` kini memasukkan emergency.
+- Smoke test browser Phase 1C **PASS** untuk simpan lokal offline, kata-kata status dan counter pending, serta reconnect. Saat upload Firestore online gagal, event lokal tetap pending dengan `firestoreId` tersimpan; reconnect memakai persis ID tersebut dan menghasilkan satu dokumen emergency Firestore tanpa duplikat. Koordinat profil Relawan yang valid tersalin; tanpa `poskoLat` dan `poskoLng` pada profil, `lat` dan `lng` tidak ada pada record lokal maupun Firestore, tanpa GPS fallback. Hasil manual ini terpisah dari tes otomatis berbasis mock.
+- Status/konfirmasi oleh Faskes tetap Phase 3; event Phase 1C hanya `t0-suspect`.
 
 ---
 
@@ -490,13 +484,13 @@ Lalu jalankan semua scenario demo pada browser normal + simulated offline.
 | ✅ Phase 0B | `src/lib/db.js` | v2 utuh; v3 audit/cleanup; v4 unique NIK |
 | ✅ existing | `src/App.jsx` | Tambah PFA/SRQ/Risk/Faskes routes pada phase terkait |
 | ✅ existing | `src/pages/relawan/HomePage.jsx` | Tidak perlu perubahan besar untuk entry Screen 2 |
-| ✅ Phase 0A/0B | `src/components/layout/RelawanLayout.jsx` | Bottom nav ke lookup; status pending/konflik; RedFlagFAB tetap Phase 1 |
+| ✅/⚠️ Phase 1C | `src/components/layout/RelawanLayout.jsx` | FAB pada route Relawan relevan; pending emergency di banner; smoke test browser Phase 1C PASS |
 | ✅ Phase 0A | `src/contexts/AssessmentContext.jsx` | Active patient/phase context + session persistence |
-| ✅ Phase 0B | `src/lib/sync.js` | Pasien lalu kasus; emergency sync tetap di luar Phase 0 |
+| ✅/⚠️ Phase 1C | `src/lib/sync.js` | Pasien → emergency → kasus; hasil/count emergency terintegrasi; smoke test browser Phase 1C PASS |
 | ✅/⚠️ Phase 1A | `src/lib/caseRecords.js`, `src/lib/sync.js`, pembaca kasus Relawan/Admin | Contract bertipe, serializer dan pembacaan zona aman; manual terpilih dan Vitest PASS |
 | ✅ Phase 0C | `src/lib/seed.js` | Budi + linked history dan seed berulang lulus smoke test |
 | ✅ Phase 1B terpilih | `src/pages/relawan/PfaPage.jsx`, `src/pages/relawan/PatientLookupPage.jsx` | LOOK/LISTEN/LINK; 78/78 tes otomatis, smoke test percabangan, dan retest pre-merge PASS; belum full E2E |
-| **NEW Phase 1** | `src/components/RedFlagFAB.jsx` | FAB + 3 verification gates |
+| ✅/⚠️ Phase 1C | `src/components/RedFlagFAB.jsx` | FAB + 3 indikator provisional; smoke test browser Phase 1C PASS |
 | **NEW Phase 2** | `src/lib/srq20Questions.js` | Structured question definitions |
 | **NEW Phase 2** | `src/pages/relawan/Srq20Page.jsx` | SRQ-20 + STT assist |
 | **NEW Phase 2** | `src/pages/relawan/RiskFactorPage.jsx` | Risk/function evaluation |
@@ -598,4 +592,4 @@ Setiap prompt Codex harus menyertakan:
 - test/build/lint requirement;
 - instruksi memperbarui `docs/changes-notes.md` setelah task berhasil.
 
-**Status terkini:** Phase 1B PFA LOOK/LISTEN/LINK selesai untuk scope prototipe terpilih: source, 78/78 tes otomatis, smoke test percabangan/resume/pembatalan, dan retest pre-merge logout/verifikasi riwayat cloud PASS. Refresh offline preview produksi PASS; hasil ini tidak mencakup seluruh skenario offline/PWA. `/relawan/history` lintas browser tetap gap hardening terpisah. Suite E2E penuh belum ada. Red Flag/T0 serta persistensi/sinkronisasi emergency menjadi pekerjaan Phase 1 berikutnya; SRQ-20, Risk Factor, dan hasil T1/T2/T3 tetap Phase 2. Smoke test manual Phase 0 dan pemeriksaan manual terpilih Phase 1A tetap PASS sebagaimana dicatat sebelumnya. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.
+**Status terkini:** Phase 1C Red Flag/T0-Suspect telah diimplementasikan; 93/93 tes otomatis dan smoke test browser Phase 1C **PASS**. Hasil manual Phase 0 dan validasi terpilih Phase 1A/1B tetap sebagaimana tercatat sebelumnya. Smoke test Phase 1C mencakup alur emergency offline/reconnect tersendiri; belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Faskes validasi T0, SRQ-20, Risk Factor, dan hasil T1/T2/T3 tetap fase berikutnya. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.
