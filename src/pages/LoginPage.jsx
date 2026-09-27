@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { getHomeRouteForRole } from '../lib/authRoles'
 import { Brain, LogIn, Mail, Lock, AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
@@ -8,8 +9,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
-  const navigate = useNavigate()
+  const { login, user, userProfile, loading: authLoading, profileLoading, profileIssue, retryProfile, logout } = useAuth()
+  const homeRoute = getHomeRouteForRole(userProfile?.role)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -17,11 +18,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const result = await login(email, password)
-      // Get user profile to determine redirect
-      // The auth context will update userProfile, we check after a short delay
-      // or we can read from the result
-      navigate('/relawan') // default, AuthContext + ProtectedRoute will handle redirect
+      await login(email, password)
     } catch (err) {
       switch (err.code) {
         case 'auth/user-not-found':
@@ -42,6 +39,34 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (homeRoute) return <Navigate to={homeRoute} replace />
+
+  if (authLoading || (user && profileLoading)) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600">Memuat profil akun...</div>
+  }
+
+  if (user && profileIssue) {
+    const message = profileIssue === 'offline'
+      ? 'Profil akun belum tersimpan di perangkat ini. Sambungkan internet, lalu coba lagi.'
+      : profileIssue === 'missing'
+        ? 'Profil akun tidak ditemukan. Hubungi pengelola akun.'
+        : profileIssue === 'invalid'
+          ? 'Peran pada profil akun tidak didukung. Hubungi pengelola akun.'
+          : 'Profil akun belum dapat dimuat. Periksa koneksi, lalu coba lagi.'
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-sm">
+          <h1 className="font-semibold text-slate-800">Profil belum tersedia</h1>
+          <p className="mt-2 text-sm text-slate-600">{message}</p>
+          <div className="mt-4 flex justify-center gap-3">
+            <button type="button" onClick={retryProfile} className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white">Coba lagi</button>
+            <button type="button" onClick={logout} className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700">Keluar</button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

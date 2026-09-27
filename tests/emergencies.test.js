@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => {
   const rows = new Map();
+  const cloud = new Map();
   let nextId = 1;
   let nextCloudId = 1;
   const emergencies = {
@@ -18,10 +19,14 @@ const state = vi.hoisted(() => {
   };
   return {
     rows,
+    cloud,
     emergencies,
-    setDoc: vi.fn(async () => {}),
+    setDoc: vi.fn(async (reference, payload, options) => {
+      const previous = cloud.get(reference.id) || {};
+      cloud.set(reference.id, options?.merge ? { ...previous, ...payload } : { ...payload });
+    }),
     allocations: vi.fn(() => `emergency-cloud-${nextCloudId++}`),
-    reset: () => { rows.clear(); nextId = 1; nextCloudId = 1; },
+    reset: () => { rows.clear(); cloud.clear(); nextId = 1; nextCloudId = 1; },
   };
 });
 
@@ -119,6 +124,8 @@ describe('local-first emergency persistence and cloud retry', () => {
     expect(state.emergencies.add.mock.invocationCallOrder[0]).toBeLessThan(state.setDoc.mock.invocationCallOrder[0]);
     expect(state.rows.get(id).synced).toBe(1);
     expect(state.rows.get(id).firestoreId).toEqual(expect.any(String));
+    expect(state.setDoc).toHaveBeenCalledWith(expect.objectContaining({ id: state.rows.get(id).firestoreId }),
+      expect.any(Object), { merge: true });
   });
 
   it('rejects invalid events and a failed IndexedDB insert without attempting cloud upload', async () => {
@@ -163,9 +170,12 @@ describe('local-first emergency persistence and cloud retry', () => {
     await expect(pushEmergencyToFirestore(id)).rejects.toThrow('local mark failed');
     const firestoreId = state.rows.get(id).firestoreId;
     expect(state.rows.get(id).synced).toBe(0);
+    state.cloud.set(firestoreId, { ...state.cloud.get(firestoreId), independentCloudMetadata: 'preserve me' });
     await pushEmergencyToFirestore(id);
     expect(state.setDoc.mock.calls.map(([reference]) => reference.id)).toEqual([firestoreId, firestoreId]);
     expect(state.allocations).toHaveBeenCalledOnce();
+    expect(state.cloud.get(firestoreId).independentCloudMetadata).toBe('preserve me');
+    expect(state.cloud.size).toBe(1);
   });
 
   it('serializes only event fields and Firestore timestamps', async () => {
