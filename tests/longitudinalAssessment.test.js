@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SRQ20_PROTOCOL } from '../src/protocols/srq20Protocol.js';
 import { RISK_FUNCTION_PROTOCOL } from '../src/protocols/riskFunctionProtocol.js';
+import { validateSrq20Responses } from '../src/lib/srq20.js';
+import { validateRiskFunctionResponses } from '../src/lib/riskFunction.js';
+import { analyzeSrq20 } from '../src/lib/scoring.js';
+import { calculateFinalTier } from '../src/lib/classification.js';
 import {
   LONGITUDINAL_DRAFT_KEY, clearLongitudinalDraft, loadLongitudinalDraft,
   restoreLongitudinalDraft, saveLongitudinalDraft,
@@ -28,10 +32,51 @@ const draft = (change = {}) => ({
 });
 
 describe('longitudinal draft binding', () => {
+  it.each(['verbal', 'nonverbal'])('accepts a fresh %s draft with all answers unanswered', (inputMode) => {
+    const fresh = draft({
+      inputMode, srqResponses: {}, riskFactors: {}, functionalImpairment: {},
+    });
+    expect(restoreLongitudinalDraft(fresh, assessment, uid)).toEqual(fresh);
+    expect(validateSrq20Responses(fresh.srqResponses, { requireComplete: true }).valid).toBe(false);
+  });
+
   it('restores valid partial Screen 5 and Screen 6 progress for the same session', () => {
     expect(restoreLongitudinalDraft(draft(), assessment, uid)).toEqual(draft());
     expect(restoreLongitudinalDraft(draft({ inputMode: 'nonverbal', currentStep: 'risk-function' }), assessment, uid))
       .toEqual(draft({ inputMode: 'nonverbal', currentStep: 'risk-function' }));
+  });
+
+  it('switches input mode without changing structured answers or their validity', () => {
+    const verbal = draft();
+    const nonverbal = restoreLongitudinalDraft({ ...verbal, inputMode: 'nonverbal' }, assessment, uid);
+    expect(nonverbal.inputMode).toBe('nonverbal');
+    expect(nonverbal.srqResponses).toEqual(verbal.srqResponses);
+    expect(validateSrq20Responses(nonverbal.srqResponses)).toEqual(validateSrq20Responses(verbal.srqResponses));
+  });
+
+  it.each([
+    [{}, {}],
+    [{ 'risk.01': false }, { 'function.01': true }],
+  ])('keeps complete SRQ answers and partial Screen 6 data on step transition', (riskFactors, functionalImpairment) => {
+    const srqResponses = Object.fromEntries(SRQ20_PROTOCOL.items.map(({ id }) => [id, false]));
+    const next = draft({ currentStep: 'risk-function', srqResponses, riskFactors, functionalImpairment });
+    expect(restoreLongitudinalDraft(next, assessment, uid)).toEqual(next);
+    expect(validateSrq20Responses(next.srqResponses, { requireComplete: true }).valid).toBe(true);
+  });
+
+  it('requires complete SRQ and Risk/Function answers before readiness', () => {
+    const srqResponses = Object.fromEntries(SRQ20_PROTOCOL.items.map(({ id }) => [id, false]));
+    const incompleteSrq = { ...srqResponses };
+    delete incompleteSrq['srq20.20'];
+    expect(() => analyzeSrq20(incompleteSrq)).toThrow();
+
+    const { baseTier } = analyzeSrq20(srqResponses);
+    expect(validateRiskFunctionResponses({ riskFactors: {}, functionalImpairment: {} }, { requireComplete: true }).valid).toBe(false);
+    expect(() => calculateFinalTier({ baseTier, riskFactors: {}, functionalImpairment: {} })).toThrow();
+
+    const riskFactors = Object.fromEntries(RISK_FUNCTION_PROTOCOL.sections[0].items.map(({ id }) => [id, false]));
+    const functionalImpairment = Object.fromEntries(RISK_FUNCTION_PROTOCOL.sections[1].items.map(({ id }) => [id, false]));
+    expect(calculateFinalTier({ baseTier, riskFactors, functionalImpairment }).finalTier).toBe(baseTier);
   });
 
   it.each([
@@ -63,7 +108,7 @@ describe('longitudinal draft binding', () => {
 });
 
 describe('defensive sessionStorage draft helpers', () => {
-  it('saves a bound normalized draft, restores it, and clears only its key', () => {
+  it.each(['verbal', 'nonverbal'])('saves a bound %s draft, restores it, and clears only its key', (inputMode) => {
     const rows = new Map();
     const storage = {
       setItem: vi.fn((key, value) => rows.set(key, value)),
@@ -72,13 +117,34 @@ describe('defensive sessionStorage draft helpers', () => {
     };
     vi.stubGlobal('sessionStorage', storage);
     try {
-      const { inputMode, currentStep, srqResponses, riskFactors, functionalImpairment } = draft();
+      const expected = draft({ inputMode });
+      const { currentStep, srqResponses, riskFactors, functionalImpairment } = expected;
       expect(saveLongitudinalDraft({ inputMode, currentStep, srqResponses, riskFactors, functionalImpairment }, assessment, uid)).toBe(true);
-      expect(JSON.parse(rows.get(LONGITUDINAL_DRAFT_KEY))).toEqual(draft());
-      expect(loadLongitudinalDraft(assessment, uid)).toEqual(draft());
+      expect(JSON.parse(rows.get(LONGITUDINAL_DRAFT_KEY))).toEqual(expected);
+      expect(loadLongitudinalDraft(assessment, uid)).toEqual(expected);
       clearLongitudinalDraft();
       expect(storage.removeItem).toHaveBeenLastCalledWith(LONGITUDINAL_DRAFT_KEY);
       expect(loadLongitudinalDraft(assessment, uid)).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('persists a step transition with complete SRQ and partial Risk/Function data', () => {
+    const rows = new Map();
+    vi.stubGlobal('sessionStorage', {
+      getItem: (key) => rows.get(key) ?? null,
+      setItem: (key, value) => rows.set(key, value),
+      removeItem: (key) => rows.delete(key),
+    });
+    try {
+      const srqResponses = Object.fromEntries(SRQ20_PROTOCOL.items.map(({ id }) => [id, false]));
+      const progress = {
+        inputMode: 'nonverbal', currentStep: 'risk-function', srqResponses,
+        riskFactors: { 'risk.01': true }, functionalImpairment: {},
+      };
+      expect(saveLongitudinalDraft(progress, assessment, uid)).toBe(true);
+      expect(loadLongitudinalDraft(assessment, uid)).toMatchObject(progress);
     } finally {
       vi.unstubAllGlobals();
     }

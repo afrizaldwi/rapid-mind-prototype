@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAssessment } from '../../hooks/useAssessment';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { clearPfaDraft } from '../../lib/pfa';
+import { clearLongitudinalDraft } from '../../lib/longitudinalAssessment';
 import RedFlagFAB from '../RedFlagFAB';
 
 export default function RelawanLayout() {
@@ -18,11 +19,15 @@ export default function RelawanLayout() {
   const [showSyncToast, setShowSyncToast] = useState(false);
   const isAssessmentPath = location.pathname === '/relawan/patient-lookup' ||
                            location.pathname === '/relawan/pfa' ||
+                           location.pathname === '/relawan/srq20' ||
+                           location.pathname === '/relawan/risk-factor' ||
                            location.pathname === '/relawan/triage' ||
                            location.pathname.startsWith('/relawan/triage/');
   const showRedFlag = location.pathname === '/relawan' ||
                       location.pathname === '/relawan/patient-lookup' ||
                       location.pathname === '/relawan/pfa' ||
+                      location.pathname === '/relawan/srq20' ||
+                      location.pathname === '/relawan/risk-factor' ||
                       location.pathname === '/relawan/triage' ||
                       location.pathname === '/relawan/triage/verbal' ||
                       location.pathname === '/relawan/triage/nonverbal' ||
@@ -33,6 +38,8 @@ export default function RelawanLayout() {
                         location.pathname.includes('/triage/nonverbal') || 
                         location.pathname.includes('/triage/result') ||
                         location.pathname === '/relawan/pfa' ||
+                        location.pathname === '/relawan/srq20' ||
+                        location.pathname === '/relawan/risk-factor' ||
                         location.pathname.includes('/patient-lookup');
 
   useEffect(() => {
@@ -53,6 +60,7 @@ export default function RelawanLayout() {
   const handleLogout = async () => {
     clearAssessment();
     clearPfaDraft();
+    clearLongitudinalDraft();
     await logout();
     navigate('/login');
   };
