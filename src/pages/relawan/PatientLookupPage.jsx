@@ -104,6 +104,11 @@ export default function PatientLookupPage() {
       (record) => getCaseRecordType(record) === "srq20",
     );
 
+  const hasActiveLongitudinalAssessment =
+    lookupResult?.found &&
+    assessment?.patient?.nik === lookupResult.patient.nik &&
+    assessment?.phase === "lanjutan";
+
   const needsAbandonment = (targetNik, action) => {
     if (assessment && assessment.patient?.nik !== targetNik) {
       setPendingAction(action);
@@ -400,9 +405,11 @@ export default function PatientLookupPage() {
                 </h3>
                 <p className="text-xs text-amber-600 mt-0.5">
                   {pfaProgress === "completed"
-                    ? hasCompletedSrq
-                      ? "PFA dan asesmen SRQ-20 sebelumnya telah selesai. Anda dapat memulai asesmen lanjutan baru."
-                      : "PFA telah selesai. Lanjutkan ke asesmen SRQ-20."
+                    ? hasActiveLongitudinalAssessment
+                      ? "PFA telah selesai. Asesmen lanjutan aktif dapat dilanjutkan."
+                      : hasCompletedSrq
+                        ? "PFA dan asesmen SRQ-20 sebelumnya telah selesai. Anda dapat memulai asesmen lanjutan baru."
+                        : "PFA telah selesai. Lanjutkan ke asesmen SRQ-20."
                     : pfaProgress === "in-progress"
                       ? "PFA belum selesai. Asesmen aktif dapat dilanjutkan."
                       : pfaProgress === "incomplete"
@@ -499,9 +506,11 @@ export default function PatientLookupPage() {
                 className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
               >
                 {pfaProgress === "completed"
-                  ? hasCompletedSrq
-                    ? "Mulai Asesmen Lanjutan Baru"
-                    : "Lanjutkan ke Wawancara SRQ-20"
+                  ? hasActiveLongitudinalAssessment
+                    ? "Lanjutkan Asesmen Lanjutan"
+                    : hasCompletedSrq
+                      ? "Mulai Asesmen Lanjutan Baru"
+                      : "Lanjutkan ke Wawancara SRQ-20"
                   : pfaProgress === "in-progress"
                     ? "Lanjutkan PFA"
                     : "Mulai / Lanjutkan PFA"}
