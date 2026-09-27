@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useOnlineStatus } from "./useOnlineStatus";
-import { getSyncCounts, syncPendingData } from "../lib/sync";
+import { getSyncCounts, isSyncComplete, syncPendingData } from "../lib/sync";
 
 export function useOfflineSync() {
   const isOnline = useOnlineStatus();
-  const [counts, setCounts] = useState({ pending: 0, conflicts: 0, patients: 0, cases: 0 });
+  const [counts, setCounts] = useState({ pending: 0, conflicts: 0, patients: 0, emergencies: 0, cases: 0 });
   const [countsLoaded, setCountsLoaded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState(null);
@@ -30,8 +30,7 @@ export function useOfflineSync() {
       try {
         const result = await syncPendingData();
         const fresh = await updatePendingCount();
-        const complete = !!fresh && fresh.pending === 0 && fresh.conflicts === 0 &&
-          result.patients.failed === 0 && result.cases.failed === 0;
+        const complete = isSyncComplete(result, fresh);
         const finalResult = { ...result, remaining: fresh, complete };
         setLastSyncResult(finalResult);
         return finalResult;
