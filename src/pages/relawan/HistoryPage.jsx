@@ -114,6 +114,11 @@ export default function HistoryPage() {
                   Metode: Jalur{" "}
                   {item.jalur === "verbal" ? "A (Verbal)" : item.jalur === "nonverbal" ? "B (Non-Verbal)" : "Tidak diketahui"}
                 </p>}
+                {getCaseRecordType(item) === 'srq20' && (
+                  <p className="mb-1 text-sm font-medium text-gray-800">
+                    {item.tier} · {item.srq20Score} / 20 · {item.inputMode === 'verbal' ? 'Verbal' : 'Non-Verbal'}
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
                   {formatDate(item.timestamp)}

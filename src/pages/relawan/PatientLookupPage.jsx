@@ -20,7 +20,12 @@ import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
 import { clearPfaDraft, getPfaProgressState } from "../../lib/pfa";
 import { clearLongitudinalDraft } from "../../lib/longitudinalAssessment";
 import { lookupPatient, registerPatient } from "../../lib/patients";
-import { collection, query, where, getDocsFromServer } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocsFromServer,
+} from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 // ───────────────────────────────────────────────
@@ -43,15 +48,25 @@ const DEMO_PATIENTS = {
 
 function historyBadge(record) {
   const zone = getLegacyZone(record);
-  if (zone) return {
-    label: `Zona ${zone}`,
-    color: zone === 'merah' ? 'bg-red-100 text-red-700' :
-      zone === 'kuning' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700',
-  };
+  if (zone)
+    return {
+      label: `Zona ${zone}`,
+      color:
+        zone === "merah"
+          ? "bg-red-100 text-red-700"
+          : zone === "kuning"
+            ? "bg-amber-100 text-amber-700"
+            : "bg-green-100 text-green-700",
+    };
   const type = getCaseRecordType(record);
   return {
-    label: type === 'pfa' ? 'PFA' : type === 'srq20' ? 'SRQ-20' : 'Catatan tidak diketahui',
-    color: 'bg-gray-100 text-gray-700',
+    label:
+      type === "pfa"
+        ? "PFA"
+        : type === "srq20"
+          ? `SRQ-20 · ${record.tier}`
+          : "Catatan tidak diketahui",
+    color: "bg-gray-100 text-gray-700",
   };
 }
 
@@ -71,13 +86,28 @@ export default function PatientLookupPage() {
 
   // ──────────── NIK validation ────────────
   const isNikValid = /^\d{16}$/.test(nik);
-  const isFormComplete = isNikValid && nama.trim() && usia.trim() && jenisKelamin;
-  const pfaProgress = lookupResult?.found ? getPfaProgressState({
-    history: lookupResult.history,
-    cloudVerified: lookupResult.cloudVerified,
-    assessment,
-    patientNik: lookupResult.patient.nik,
-  }) : null;
+  const isFormComplete =
+    isNikValid && nama.trim() && usia.trim() && jenisKelamin;
+  const pfaProgress = lookupResult?.found
+    ? getPfaProgressState({
+        history: lookupResult.history,
+        cloudVerified: lookupResult.cloudVerified,
+        assessment,
+        patientNik: lookupResult.patient.nik,
+      })
+    : null;
+
+  const hasCompletedSrq =
+    lookupResult?.found &&
+    Array.isArray(lookupResult.history) &&
+    lookupResult.history.some(
+      (record) => getCaseRecordType(record) === "srq20",
+    );
+
+  const hasActiveLongitudinalAssessment =
+    lookupResult?.found &&
+    assessment?.patient?.nik === lookupResult.patient.nik &&
+    assessment?.phase === "lanjutan";
 
   const needsAbandonment = (targetNik, action) => {
     if (assessment && assessment.patient?.nik !== targetNik) {
@@ -88,14 +118,26 @@ export default function PatientLookupPage() {
   };
 
   const loadHistory = async (patientNik) => {
-    const localCases = await localDb.cases.where("patientNik").equals(patientNik).toArray();
+    const localCases = await localDb.cases
+      .where("patientNik")
+      .equals(patientNik)
+      .toArray();
     if (!navigator.onLine) return { history: localCases, cloudVerified: false };
     try {
-      const snapshot = await getDocsFromServer(query(collection(db, "cases"), where("patientNik", "==", patientNik)));
-      const localCloudIds = new Set(localCases.map((item) => item.firestoreId).filter(Boolean));
-      const cloudCases = snapshot.docs.filter((item) => !localCloudIds.has(item.id)).map((item) => ({ id: item.id, ...item.data() }));
+      const snapshot = await getDocsFromServer(
+        query(collection(db, "cases"), where("patientNik", "==", patientNik)),
+      );
+      const localCloudIds = new Set(
+        localCases.map((item) => item.firestoreId).filter(Boolean),
+      );
+      const cloudCases = snapshot.docs
+        .filter((item) => !localCloudIds.has(item.id))
+        .map((item) => ({ id: item.id, ...item.data() }));
       const history = [...localCases, ...cloudCases].sort((a, b) => {
-        const date = (item) => new Date(item.timestamp?.toDate?.() || item.timestamp || 0).getTime() || 0;
+        const date = (item) =>
+          new Date(
+            item.timestamp?.toDate?.() || item.timestamp || 0,
+          ).getTime() || 0;
         return date(b) - date(a);
       });
       return { history, cloudVerified: true };
@@ -134,7 +176,11 @@ export default function PatientLookupPage() {
       setLookupResult({ found: false });
     } catch (err) {
       console.error("Lookup error:", err);
-      setError(err.name === "PatientConflictError" ? err.message : "Gagal melakukan pencarian cloud. Coba lagi saat layanan tersedia.");
+      setError(
+        err.name === "PatientConflictError"
+          ? err.message
+          : "Gagal melakukan pencarian cloud. Coba lagi saat layanan tersedia.",
+      );
     } finally {
       setIsSearching(false);
     }
@@ -143,7 +189,7 @@ export default function PatientLookupPage() {
   // ──────────── Register new patient & navigate ────────────
   const handleRegisterAndProceed = async (allowReplace = false) => {
     if (!isFormComplete) return;
-    if (!allowReplace && needsAbandonment(nik, 'register')) return;
+    if (!allowReplace && needsAbandonment(nik, "register")) return;
 
     const patientData = {
       nik,
@@ -161,15 +207,29 @@ export default function PatientLookupPage() {
       const result = await registerPatient(patientData, navigator.onLine);
       if (result.existing) {
         const { history, cloudVerified } = await loadHistory(nik);
-        setLookupResult({ found: true, patient: result.patient, history, cloudVerified, source: "local" });
+        setLookupResult({
+          found: true,
+          patient: result.patient,
+          history,
+          cloudVerified,
+          source: "local",
+        });
         setError("NIK sudah terdaftar. Gunakan data pasien yang ditemukan.");
         return;
       }
-      startAssessment({ patient: result.patient, phase: "akut", isNewPatient: true });
+      startAssessment({
+        patient: result.patient,
+        phase: "akut",
+        isNewPatient: true,
+      });
       navigate("/relawan/pfa");
     } catch (err) {
       console.error("Registration error:", err);
-      setError(err.name === "PatientConflictError" ? err.message : "Gagal menyimpan data pasien.");
+      setError(
+        err.name === "PatientConflictError"
+          ? err.message
+          : "Gagal menyimpan data pasien.",
+      );
     }
   };
 
@@ -184,22 +244,29 @@ export default function PatientLookupPage() {
       assessment,
       patientNik: patient.nik,
     });
-    if (progress === 'unknown') return;
-    if (!allowReplace && needsAbandonment(patient.nik, 'existing')) return;
+    if (progress === "unknown") return;
+    if (!allowReplace && needsAbandonment(patient.nik, "existing")) return;
 
     try {
-      if (progress === 'completed') {
-        startAssessment({
-          patient,
-          phase: "lanjutan",
-          previousHistory: lookupResult.history || [],
-        });
-        // Falls back to triage until the dedicated SRQ-20 flow is built.
-        navigate("/relawan/triage");
-      } else if (progress === 'in-progress') {
+      if (progress === "completed") {
+        if (
+          assessment?.patient?.nik !== patient.nik ||
+          assessment?.phase !== "lanjutan"
+        ) {
+          startAssessment({
+            patient,
+            phase: "lanjutan",
+            previousHistory: lookupResult.history || [],
+          });
+        }
+        navigate("/relawan/srq20");
+      } else if (progress === "in-progress") {
         navigate("/relawan/pfa");
       } else {
-        if (assessment?.patient?.nik !== patient.nik || assessment?.phase !== 'akut') {
+        if (
+          assessment?.patient?.nik !== patient.nik ||
+          assessment?.phase !== "akut"
+        ) {
           startAssessment({
             patient,
             phase: "akut",
@@ -221,8 +288,8 @@ export default function PatientLookupPage() {
     clearAssessment();
     clearPfaDraft();
     clearLongitudinalDraft();
-    if (action === 'register') void handleRegisterAndProceed(true);
-    if (action === 'existing') handleProceedExisting(true);
+    if (action === "register") void handleRegisterAndProceed(true);
+    if (action === "existing") handleProceedExisting(true);
   };
 
   // ──────────── Demo quick-fill ────────────
@@ -246,9 +313,7 @@ export default function PatientLookupPage() {
         >
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <h1 className="text-lg font-bold text-gray-800">
-          Identitas Penyintas
-        </h1>
+        <h1 className="text-lg font-bold text-gray-800">Identitas Penyintas</h1>
       </div>
 
       <div className="p-4 space-y-4">
@@ -339,10 +404,17 @@ export default function PatientLookupPage() {
                   Penyintas Ditemukan
                 </h3>
                 <p className="text-xs text-amber-600 mt-0.5">
-                  {pfaProgress === 'completed' ? 'PFA telah selesai. Riwayat asesmen tersedia.' :
-                    pfaProgress === 'in-progress' ? 'PFA belum selesai. Asesmen aktif dapat dilanjutkan.' :
-                    pfaProgress === 'incomplete' ? 'PFA belum selesai. Lanjutkan asesmen fase akut.' :
-                    'Status PFA belum dapat diverifikasi.'}
+                  {pfaProgress === "completed"
+                    ? hasActiveLongitudinalAssessment
+                      ? "PFA telah selesai. Asesmen lanjutan aktif dapat dilanjutkan."
+                      : hasCompletedSrq
+                        ? "PFA dan asesmen SRQ-20 sebelumnya telah selesai. Anda dapat memulai asesmen lanjutan baru."
+                        : "PFA telah selesai. Lanjutkan ke asesmen SRQ-20."
+                    : pfaProgress === "in-progress"
+                      ? "PFA belum selesai. Asesmen aktif dapat dilanjutkan."
+                      : pfaProgress === "incomplete"
+                        ? "PFA belum selesai. Lanjutkan asesmen fase akut."
+                        : "Status PFA belum dapat diverifikasi."}
                 </p>
               </div>
             </div>
@@ -398,9 +470,7 @@ export default function PatientLookupPage() {
                               month: "short",
                               year: "numeric",
                             }).format(
-                              new Date(
-                                h.timestamp?.toDate?.() || h.timestamp,
-                              ),
+                              new Date(h.timestamp?.toDate?.() || h.timestamp),
                             )
                           : "—"}
                       </span>
@@ -415,12 +485,19 @@ export default function PatientLookupPage() {
               </div>
             )}
 
-            {pfaProgress === 'unknown' ? (
+            {pfaProgress === "unknown" ? (
               <div className="space-y-3">
-                <p className="text-sm text-amber-800">Riwayat cloud belum dapat diperiksa. Sambungkan internet lalu cari ulang agar status asesmen tidak salah.</p>
-                <button type="button" onClick={handleLookup} disabled={isSearching}
-                  className="w-full rounded-xl bg-amber-500 py-3 font-bold text-white disabled:opacity-50">
-                  {isSearching ? 'Mencari...' : 'Coba Lagi'}
+                <p className="text-sm text-amber-800">
+                  Riwayat cloud belum dapat diperiksa. Sambungkan internet lalu
+                  cari ulang agar status asesmen tidak salah.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleLookup}
+                  disabled={isSearching}
+                  className="w-full rounded-xl bg-amber-500 py-3 font-bold text-white disabled:opacity-50"
+                >
+                  {isSearching ? "Mencari..." : "Coba Lagi"}
                 </button>
               </div>
             ) : (
@@ -428,8 +505,15 @@ export default function PatientLookupPage() {
                 onClick={() => handleProceedExisting()}
                 className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
               >
-                {pfaProgress === 'completed' ? 'Lanjutkan ke Wawancara SRQ-20' :
-                  pfaProgress === 'in-progress' ? 'Lanjutkan PFA' : 'Mulai / Lanjutkan PFA'}
+                {pfaProgress === "completed"
+                  ? hasActiveLongitudinalAssessment
+                    ? "Lanjutkan Asesmen Lanjutan"
+                    : hasCompletedSrq
+                      ? "Mulai Asesmen Lanjutan Baru"
+                      : "Lanjutkan ke Wawancara SRQ-20"
+                  : pfaProgress === "in-progress"
+                    ? "Lanjutkan PFA"
+                    : "Mulai / Lanjutkan PFA"}
                 <ChevronRight className="w-5 h-5" />
               </button>
             )}
@@ -553,23 +637,57 @@ export default function PatientLookupPage() {
       )}
 
       {pendingAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="unfinished-assessment-title">
-            <h2 id="unfinished-assessment-title" className="text-lg font-bold text-gray-900">Asesmen Belum Selesai</h2>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unfinished-assessment-title"
+          >
+            <h2
+              id="unfinished-assessment-title"
+              className="text-lg font-bold text-gray-900"
+            >
+              Asesmen Belum Selesai
+            </h2>
             <p className="mt-2 text-sm text-gray-700">
-              Asesmen untuk {assessment?.patient?.nama || 'penyintas lain'} belum selesai. Memulai asesmen pasien lain akan membatalkan draf yang sedang aktif.
+              Asesmen untuk {assessment?.patient?.nama || "penyintas lain"}{" "}
+              belum selesai. Memulai asesmen pasien lain akan membatalkan draf
+              yang sedang aktif.
             </p>
             <div className="mt-5 flex flex-col gap-2">
-              <button type="button" onClick={() => navigate(assessment?.phase === 'akut' ? '/relawan/pfa' : '/relawan/triage')}
-                className="rounded-xl border border-blue-600 px-4 py-3 text-sm font-bold text-blue-700">
-                {assessment?.phase === 'akut' ? 'Kembali ke PFA' : 'Kembali ke Asesmen'}
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    assessment?.phase === "akut"
+                      ? "/relawan/pfa"
+                      : "/relawan/srq20",
+                  )
+                }
+                className="rounded-xl border border-blue-600 px-4 py-3 text-sm font-bold text-blue-700"
+              >
+                {assessment?.phase === "akut"
+                  ? "Kembali ke PFA"
+                  : "Kembali ke Asesmen"}
               </button>
-              <button type="button" onClick={handleConfirmAbandonment}
-                className="rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white">
+              <button
+                type="button"
+                onClick={handleConfirmAbandonment}
+                className="rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white"
+              >
                 Batalkan Asesmen & Lanjutkan
               </button>
-              <button type="button" onClick={() => setPendingAction(null)}
-                className="px-4 py-2 text-sm text-gray-600">Tetap di Pencarian</button>
+              <button
+                type="button"
+                onClick={() => setPendingAction(null)}
+                className="px-4 py-2 text-sm text-gray-600"
+              >
+                Tetap di Pencarian
+              </button>
             </div>
           </div>
         </div>

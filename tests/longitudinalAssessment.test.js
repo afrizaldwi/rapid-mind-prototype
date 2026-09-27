@@ -5,8 +5,9 @@ import { validateSrq20Responses } from '../src/lib/srq20.js';
 import { validateRiskFunctionResponses } from '../src/lib/riskFunction.js';
 import { analyzeSrq20 } from '../src/lib/scoring.js';
 import { calculateFinalTier } from '../src/lib/classification.js';
+import { getCaseRecordType } from '../src/lib/caseRecords.js';
 import {
-  LONGITUDINAL_DRAFT_KEY, clearLongitudinalDraft, loadLongitudinalDraft,
+  LONGITUDINAL_DRAFT_KEY, buildSrq20CaseRecord, clearLongitudinalDraft, loadLongitudinalDraft,
   restoreLongitudinalDraft, saveLongitudinalDraft,
 } from '../src/lib/longitudinalAssessment.js';
 
@@ -29,6 +30,93 @@ const draft = (change = {}) => ({
   riskFactors: { 'risk.01': false },
   functionalImpairment: { 'function.01': true },
   ...change,
+});
+const completeDraft = (yes = 0, change = {}) => draft({
+  currentStep: 'risk-function',
+  srqResponses: Object.fromEntries(SRQ20_PROTOCOL.items.map(({ id }, index) => [id, index < yes])),
+  riskFactors: Object.fromEntries(RISK_FUNCTION_PROTOCOL.sections[0].items.map(({ id }) => [id, false])),
+  functionalImpairment: Object.fromEntries(RISK_FUNCTION_PROTOCOL.sections[1].items.map(({ id }) => [id, false])),
+  ...change,
+});
+const user = { uid };
+const profile = { name: 'Rina', poskoName: 'Posko A', poskoLat: -6.2, poskoLng: 106.8 };
+
+describe('completed SRQ-20 case builder', () => {
+  it.each([
+    ['verbal', 0, 'T3'],
+    ['nonverbal', 6, 'T2'],
+    ['verbal', 11, 'T1'],
+  ])('builds a validated %s case with %i Yes answers and %s', (inputMode, yes, tier) => {
+    const progress = completeDraft(yes, {
+      inputMode,
+      riskFactors: { ...completeDraft().riskFactors, 'risk.01': true },
+      functionalImpairment: { ...completeDraft().functionalImpairment, 'function.01': true },
+    });
+    const before = structuredClone(progress);
+    const record = buildSrq20CaseRecord(progress, assessment, user, profile);
+
+    expect(getCaseRecordType(record)).toBe('srq20');
+    expect(record).toMatchObject({
+      recordType: 'srq20', phase: 'lanjutan', protocolVersion: SRQ20_PROTOCOL.version,
+      inputMode, srq20Score: yes, baseTier: tier,
+      riskFunctionProtocolVersion: RISK_FUNCTION_PROTOCOL.version,
+      classificationVersion: 'classification-prototype-v1', tier,
+      patientNik: assessment.patient.nik, relawanId: uid,
+      patientName: 'Siti', patientAge: 34, patientGender: 'P',
+      relawanName: 'Rina', poskoName: 'Posko A', poskoLat: -6.2, poskoLng: 106.8,
+    });
+    expect(record.responses).toEqual(progress.srqResponses);
+    expect(Object.keys(record.responses)).toHaveLength(20);
+    expect(Object.values(record.responses).every((value) => typeof value === 'boolean')).toBe(true);
+    expect(record.riskFactors).toEqual(progress.riskFactors);
+    expect(record.functionalImpairment).toEqual(progress.functionalImpairment);
+    expect(Object.keys(record.riskFactors)).toHaveLength(4);
+    expect(Object.keys(record.functionalImpairment)).toHaveLength(4);
+    for (const field of ['zona', 'triageResult', 'transcript', 'audio', 'riskFactorScore', 'adjustmentRuleDefined', 'adjustmentsApplied']) {
+      expect(record).not.toHaveProperty(field);
+      expect(progress).not.toHaveProperty(field);
+    }
+    expect(progress).toEqual(before);
+  });
+
+  it.each([
+    ['zero coordinates', { poskoLat: 0, poskoLng: 0 }, { poskoLat: 0, poskoLng: 0 }],
+    ['partial coordinates', { poskoLat: -6.2 }, null],
+    ['string coordinates', { poskoLat: '-6.2', poskoLng: 106.8 }, null],
+    ['NaN coordinates', { poskoLat: NaN, poskoLng: 106.8 }, null],
+    ['infinite coordinates', { poskoLat: Infinity, poskoLng: 106.8 }, null],
+    ['out-of-range coordinates', { poskoLat: 91, poskoLng: 106.8 }, null],
+  ])('uses only valid authenticated profile %s', (_name, coordinates, expected) => {
+    const record = buildSrq20CaseRecord(completeDraft(), assessment, user, { name: 'Rina', ...coordinates });
+    if (expected) expect(record).toMatchObject(expected);
+    else {
+      expect(record).not.toHaveProperty('poskoLat');
+      expect(record).not.toHaveProperty('poskoLng');
+    }
+  });
+
+  it('omits Patient Lookup demo posko metadata without a verified profile posko', () => {
+    const context = { ...assessment, patient: { ...assessment.patient, poskoName: 'Posko Utama - Kota' } };
+    expect(buildSrq20CaseRecord(completeDraft(), context, user, null)).not.toHaveProperty('poskoName');
+    expect(buildSrq20CaseRecord(completeDraft(), context, user, { poskoName: ' Posko Utama - Kota ' })).not.toHaveProperty('poskoName');
+    expect(buildSrq20CaseRecord(completeDraft(), context, user, { poskoName: ' Posko B ' }).poskoName).toBe('Posko B');
+  });
+
+  it.each([
+    ['missing assessment', null, user, completeDraft()],
+    ['wrong phase', { ...assessment, phase: 'akut' }, user, completeDraft()],
+    ['UID mismatch', assessment, { uid: 'other' }, completeDraft()],
+    ['wrong patient binding', assessment, user, completeDraft(0, { patientNik: '3201234567890002' })],
+    ['wrong session binding', assessment, user, completeDraft(0, { assessmentStartedAt: '2026-09-27T11:00:00.000Z' })],
+    ['incomplete SRQ', assessment, user, completeDraft(0, { srqResponses: { 'srq20.01': false } })],
+    ['malformed SRQ', assessment, user, completeDraft(0, { srqResponses: { ...completeDraft().srqResponses, 'srq20.01': 'false' } })],
+    ['incomplete risk', assessment, user, completeDraft(0, { riskFactors: {} })],
+    ['incomplete function', assessment, user, completeDraft(0, { functionalImpairment: {} })],
+    ['unsupported SRQ version', assessment, user, completeDraft(0, { srqProtocolVersion: 'srq20-prototype-v2' })],
+    ['unsupported Risk/Function version', assessment, user, completeDraft(0, { riskFunctionProtocolVersion: 'risk-function-prototype-v2' })],
+  ])('rejects %s', (_name, context, actor, progress) => {
+    expect(() => buildSrq20CaseRecord(progress, context, actor, profile)).toThrow();
+  });
 });
 
 describe('longitudinal draft binding', () => {

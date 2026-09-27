@@ -3,6 +3,9 @@ import { SRQ20_PROTOCOL } from '../protocols/srq20Protocol.js';
 import { RISK_FUNCTION_PROTOCOL } from '../protocols/riskFunctionProtocol.js';
 import { validateSrq20Responses } from './srq20.js';
 import { validateRiskFunctionResponses } from './riskFunction.js';
+import { analyzeSrq20 } from './scoring.js';
+import { calculateFinalTier } from './classification.js';
+import { validateCaseForSave } from './caseRecords.js';
 
 export const LONGITUDINAL_DRAFT_KEY = 'rapidMind.longitudinalDraft';
 export const LONGITUDINAL_STEPS = ['srq20', 'risk-function'];
@@ -89,4 +92,65 @@ export function saveLongitudinalDraft(progress, assessment, userUid) {
   } catch {
     return false;
   }
+}
+
+function validCoordinates(lat, lng) {
+  return typeof lat === 'number' && Number.isFinite(lat) && lat >= -90 && lat <= 90 &&
+    typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= 180;
+}
+
+export function buildSrq20CaseRecord(progress, assessment, user, userProfile) {
+  const draft = restoreLongitudinalDraft(progress, assessment, user?.uid);
+  if (!draft) throw new Error('Konteks asesmen lanjutan tidak valid.');
+
+  const srq = validateSrq20Responses(draft.srqResponses, {
+    protocolVersion: draft.srqProtocolVersion,
+    requireComplete: true,
+  });
+  if (!srq.valid) throw new Error('Lengkapi semua jawaban SRQ-20 sebelum menyimpan.');
+
+  const riskFunction = validateRiskFunctionResponses({
+    riskFactors: draft.riskFactors,
+    functionalImpairment: draft.functionalImpairment,
+  }, { protocolVersion: draft.riskFunctionProtocolVersion, requireComplete: true });
+  if (!riskFunction.valid) throw new Error('Lengkapi semua jawaban Risk/Function sebelum menyimpan.');
+
+  const analysis = analyzeSrq20(srq.normalizedResponses, { protocolVersion: draft.srqProtocolVersion });
+  const classification = calculateFinalTier({
+    baseTier: analysis.baseTier,
+    riskFactors: riskFunction.normalizedRiskFactors,
+    functionalImpairment: riskFunction.normalizedFunctionalImpairment,
+    riskFunctionProtocolVersion: draft.riskFunctionProtocolVersion,
+  });
+
+  const patient = assessment.patient;
+  const record = {
+    recordType: 'srq20',
+    phase: 'lanjutan',
+    protocolVersion: draft.srqProtocolVersion,
+    responses: srq.normalizedResponses,
+    inputMode: draft.inputMode,
+    srq20Score: analysis.score,
+    baseTier: analysis.baseTier,
+    riskFunctionProtocolVersion: draft.riskFunctionProtocolVersion,
+    riskFactors: riskFunction.normalizedRiskFactors,
+    functionalImpairment: riskFunction.normalizedFunctionalImpairment,
+    classificationVersion: classification.classificationVersion,
+    tier: classification.finalTier,
+    patientNik: patient.nik,
+    relawanId: user.uid,
+  };
+  if (patient.nama?.trim()) record.patientName = patient.nama;
+  if (typeof patient.usia === 'number' && Number.isFinite(patient.usia)) record.patientAge = patient.usia;
+  if (patient.jenisKelamin?.trim()) record.patientGender = patient.jenisKelamin;
+  if (typeof userProfile?.name === 'string' && userProfile.name.trim()) record.relawanName = userProfile.name;
+  const profilePosko = typeof userProfile?.poskoName === 'string' ? userProfile.poskoName.trim() : '';
+  if (profilePosko && profilePosko !== 'Posko Utama - Kota') record.poskoName = profilePosko;
+  if (validCoordinates(userProfile?.poskoLat, userProfile?.poskoLng)) {
+    record.poskoLat = userProfile.poskoLat;
+    record.poskoLng = userProfile.poskoLng;
+  }
+
+  validateCaseForSave(record);
+  return record;
 }

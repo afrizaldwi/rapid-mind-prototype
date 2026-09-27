@@ -18,6 +18,7 @@ import PatientLookupPage from './pages/relawan/PatientLookupPage'
 import PfaPage from './pages/relawan/PfaPage'
 import Srq20Page from './pages/relawan/Srq20Page'
 import RiskFactorPage from './pages/relawan/RiskFactorPage'
+import LongitudinalResultPage from './pages/relawan/LongitudinalResultPage'
 import TriagePage from './pages/relawan/TriagePage'
 import VerbalPage from './pages/relawan/VerbalPage'
 import NonVerbalPage from './pages/relawan/NonVerbalPage'
@@ -55,6 +56,7 @@ function App() {
             <Route path="pfa" element={<PfaPage />} />
             <Route path="srq20" element={<Srq20Page />} />
             <Route path="risk-factor" element={<RiskFactorPage />} />
+            <Route path="srq20/result" element={<LongitudinalResultPage />} />
             <Route path="triage" element={<TriagePage />} />
             <Route path="triage/verbal" element={<VerbalPage />} />
             <Route path="triage/nonverbal" element={<NonVerbalPage />} />
