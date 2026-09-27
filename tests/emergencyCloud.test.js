@@ -12,6 +12,15 @@ const event = (overrides = {}) => ({
   ...overrides,
 });
 const document = (id, data) => ({ id, data: () => data });
+const validation = (overrides = {}) => ({
+  version: 'secondary-validation-prototype-v1', outcome: 't0-confirmed',
+  reviewerId: 'nakes-1', decidedAt: event().timestamp, ...overrides,
+});
+const referral = (overrides = {}) => ({
+  version: 'referral-prototype-v1', status: 'waiting-dispatch',
+  createdAt: event().timestamp, createdBy: 'nakes-1',
+  updatedAt: event().timestamp, updatedBy: 'nakes-1', ...overrides,
+});
 
 describe('Firestore emergency read boundary', () => {
   it('uses Firestore timestamp as origin time and ignores additive metadata', () => {
@@ -30,11 +39,48 @@ describe('Firestore emergency read boundary', () => {
         gates: [gate], timestamp: '2026-09-27T12:00:00.000Z',
         patientNik: '3201234567890001', patientName: 'Siti', lat: 0, lng: 0,
       },
+      validation: null,
+      referral: null,
+      workflowIssue: null,
     });
   });
 
   it('accepts a valid emergency with no patient, location, or createdAt', () => {
     expect(parseEmergencySnapshot(document('anonymous', event())).origin).not.toHaveProperty('patientNik');
+  });
+
+  it('reads valid validation and referral independently of immutable origin', () => {
+    const parsed = parseEmergencySnapshot(document('confirmed', event({
+      validation: validation(), referral: referral(),
+    })));
+    expect(parsed.origin.status).toBe('t0-suspect');
+    expect(parsed.validation).toMatchObject({ outcome: 't0-confirmed', reviewerId: 'nakes-1',
+      decidedAt: '2026-09-27T12:00:00.000Z' });
+    expect(parsed.referral).toMatchObject({ status: 'waiting-dispatch',
+      createdAt: '2026-09-27T12:00:00.000Z' });
+    expect(parsed.workflowIssue).toBeNull();
+    const downgraded = parseEmergencySnapshot(document('downgraded', event({
+      validation: validation({ outcome: 'downgraded', downgradedTo: 'T2' }),
+    })));
+    expect(downgraded.validation.downgradedTo).toBe('T2');
+    expect(downgraded.referral).toBeNull();
+    expect(downgraded.workflowIssue).toBeNull();
+  });
+
+  it.each([
+    ['validation', { validation: validation({ decidedAt: 'bad' }) }, 'malformed-validation'],
+    ['referral', { validation: validation(), referral: referral({ status: 'unknown' }) }, 'malformed-referral'],
+    ['missing referral', { validation: validation() }, 'confirmed-without-referral'],
+    ['orphan referral', { referral: referral() }, 'referral-without-validation'],
+  ])('preserves a valid origin with %s workflow', (_label, metadata, issue) => {
+    const queue = collectEmergencyQueue({ docs: [
+      document('workflow-bad', event(metadata)),
+      document('origin-bad', event({ gates: ['wrong'] })),
+    ] });
+    expect(queue.items).toHaveLength(1);
+    expect(queue.items[0].origin.status).toBe('t0-suspect');
+    expect(queue.items[0].workflowIssue.codes).toContain(issue);
+    expect(queue.rejected.map(({ id }) => id)).toEqual(['origin-bad']);
   });
 
   it('rejects malformed required origin fields and invalid timestamp', () => {

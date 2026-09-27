@@ -49,7 +49,7 @@ vi.mock("firebase/firestore", () => ({
   setDoc: state.setDoc,
   Timestamp: { fromDate: (date) => ({ iso: date.toISOString() }) },
 }));
-vi.mock("../src/lib/firebase.js", () => ({ db: {} }));
+vi.mock("../src/lib/firebase.js", () => ({ db: {}, auth: { currentUser: { uid: "relawan-123" } } }));
 vi.mock("../src/lib/db.js", () => ({
   default: {
     cases: state.cases,
@@ -85,6 +85,7 @@ import {
   syncPendingCases,
   syncPendingData,
 } from "../src/lib/sync.js";
+import { auth } from "../src/lib/firebase.js";
 import { buildSrq20CaseRecord } from "../src/lib/longitudinalAssessment.js";
 import { SRQ20_PROTOCOL } from "../src/protocols/srq20Protocol.js";
 import { RISK_FUNCTION_PROTOCOL } from "../src/protocols/riskFunctionProtocol.js";
@@ -114,6 +115,7 @@ const pending = (record = pfa()) => {
 const payload = () => state.setDoc.mock.calls[0][1];
 
 beforeEach(() => {
+  auth.currentUser = { uid: "relawan-123" };
   state.reset();
   state.emergencyPending = 0;
   vi.clearAllMocks();
@@ -244,7 +246,28 @@ describe("patient-first case cloud write", () => {
     pending({ zona: "kuning", timestamp: "2026-09-26T00:00:00.000Z" });
     await syncPendingCases();
     expect(state.findLocalPatientByNik).not.toHaveBeenCalled();
-    expect(payload()).toMatchObject({ zona: "kuning", triageResult: "KUNING" });
+    expect(payload()).toMatchObject({ zona: "kuning", triageResult: "KUNING", uploadedBy: "relawan-123" });
+    expect(payload()).not.toHaveProperty("recordType");
+  });
+
+  it("keeps historical uploader attribution after failure and denies a different login", async () => {
+    const localCase = pending({ zona: "hijau", timestamp: "2026-09-26T00:00:00.000Z" });
+    state.setDoc.mockRejectedValueOnce(new Error("write failed"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(pushCaseToFirestore(localCase)).rejects.toThrow("write failed");
+    } finally {
+      log.mockRestore();
+    }
+    expect(localCase.uploadedBy).toBe("relawan-123");
+    const allocatedId = localCase.firestoreId;
+    auth.currentUser = { uid: "other-relawan" };
+    await expect(pushCaseToFirestore(localCase)).rejects.toThrow("terikat ke Relawan lain");
+    expect(state.setDoc).toHaveBeenCalledOnce();
+    auth.currentUser = { uid: "relawan-123" };
+    await pushCaseToFirestore(localCase);
+    expect(state.setDoc.mock.calls.map(([reference]) => reference.id)).toEqual([allocatedId, allocatedId]);
+    expect(state.setDoc.mock.calls[1][1]).toEqual(state.setDoc.mock.calls[0][1]);
   });
 });
 

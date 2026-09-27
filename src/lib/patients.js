@@ -3,7 +3,7 @@ import {
   runTransaction, serverTimestamp, where,
 } from 'firebase/firestore'
 import localDb from './db'
-import { db } from './firebase'
+import { auth, db } from './firebase'
 
 const isNik = (nik) => typeof nik === 'string' && /^\d{16}$/.test(nik)
 const patientFields = ['nama', 'usia', 'jenisKelamin', 'poskoName', 'registeredAt', 'lastPhase', 'pfaCompleted', 'registeredBy']
@@ -184,6 +184,25 @@ export async function pushPatientToFirestore(nik) {
   const local = await findLocalPatientByNik(nik)
   if (!local) throw new Error('Pasien lokal tidak ditemukan.')
   if (local.syncStatus === 'synced') return { patient: local, existing: true }
+  const uploaderId = auth.currentUser?.uid
+  if (!uploaderId) throw new Error('Akun Relawan tidak tersedia untuk sinkronisasi pasien.')
+  if (Object.hasOwn(local, 'registeredBy') && local.registeredBy !== uploaderId) {
+    throw new Error('Pasien pending sudah terikat ke akun Relawan lain.')
+  }
+
+  // Persist attribution before any server read or write. A failed lookup must
+  // not leave a historical pending row claimable by another account.
+  const attributed = await localDb.transaction('rw', localDb.patients, async () => {
+    const latest = await localDb.patients.get(local.id)
+    if (!latest || latest.nik !== nik || latest.syncStatus !== 'pending') {
+      throw new Error('Pasien pending berubah sebelum sinkronisasi.')
+    }
+    if (Object.hasOwn(latest, 'registeredBy') && latest.registeredBy !== uploaderId) {
+      throw new Error('Pasien pending sudah terikat ke akun Relawan lain.')
+    }
+    if (!Object.hasOwn(latest, 'registeredBy')) await localDb.patients.update(local.id, { registeredBy: uploaderId })
+    return { ...latest, registeredBy: uploaderId }
+  })
 
   let cloud
   try {
@@ -195,7 +214,7 @@ export async function pushPatientToFirestore(nik) {
   if (cloud) return { patient: await cacheCloudPatient(nik, cloud.patient), existing: true }
 
   const ref = doc(db, 'patients', nik)
-  const data = cleanPatient(local, nik)
+  const data = cleanPatient(attributed, nik)
   const created = await runTransaction(db, async (transaction) => {
     const existing = await transaction.get(ref)
     if (existing.exists()) return false

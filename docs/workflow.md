@@ -144,6 +144,8 @@ Halo Dev Team\! Biar kita satu frekuensi untuk pengerjaan prototipe/mockup web-a
 
   AUTHENTICATION & ROLE-BASED ACCESS CONTROL (RBAC)
 
+* Catatan implementasi prototipe Phase 3.2A: butir SSO/JWT dan WebSockets di bawah adalah target spesifikasi, bukan mekanisme yang sudah berjalan. Aplikasi kini memakai Firebase Auth, role dari `users/{uid}` pada Firestore, redirect client per role, dan `onSnapshot` untuk antrean Faskes. `firestore.rules` lokal belum deployed atau diuji runtime.
+
 * Auth Protocol: Universal Single Sign-On (SSO) berbasis JWT (JSON Web Token).  
 * System Routing: Setelah autentikasi berhasil, backend akan membaca role dari token JWT dan melakukan auto-redirect ke 3 antarmuka terpisah:  
   a. ROLE\_RELAWAN (Mobile PWA)  
@@ -258,4 +260,3 @@ Phase 2 (Longitudinal Evaluation Hari 30): Wawancara SRQ-20 Terpandu (Jalur A) u
 IV. Feature Innovations: Integrasi Speech-to-Text (Voice Input) untuk deteksi kata kunci berisiko dan Outdoor-Adaptable High-Contrast UI (Sunlight/Night Mode).  
      
 V. Data Integration & Geospasial Dashboard: Pembuatan Unique Patient ID untuk pemantauan longitudinal dan visualisasi Heatmap interaktif bagi BPBD/Dinkes.   
-

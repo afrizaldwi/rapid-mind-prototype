@@ -97,11 +97,12 @@ export function AuthProvider({ children }) {
 
   const register = async (email, password, profileData) => {
     const result = await createUserWithEmailAndPassword(auth, email, password);
+    if (!result.user.email) throw new Error("Email akun Firebase tidak tersedia.");
     // Simpan profil ke Firestore
     const profile = {
       ...profileData,
       role: "relawan",
-      email,
+      email: result.user.email,
       uid: result.user.uid,
       createdAt: new Date().toISOString(),
     };

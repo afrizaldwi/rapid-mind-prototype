@@ -1,0 +1,267 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasRole(role) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isRelawan() { return hasRole('relawan'); }
+    function isNakes() { return hasRole('nakes'); }
+    function isAdmin() { return hasRole('admin'); }
+
+    function nonblank(value) {
+      return value is string && value.trim().size() > 0;
+    }
+
+    function nik(value) {
+      return value is string && value.matches('^[0-9]{16}$');
+    }
+
+    function optionalText(data, key) {
+      return !(key in data) || nonblank(data[key]);
+    }
+
+    function optionalNik(data, key) {
+      return !(key in data) || nik(data[key]);
+    }
+
+    function validCoordinates(data) {
+      return ('lat' in data) == ('lng' in data) &&
+        (!('lat' in data) ||
+          (data.lat is number && data.lat >= -90 && data.lat <= 90 &&
+           data.lng is number && data.lng >= -180 && data.lng <= 180));
+    }
+
+    function validOrigin(data) {
+      return data.keys().hasAll(['protocolVersion', 'status', 'relawanId', 'gates', 'timestamp']) &&
+        data.protocolVersion == 'redflag-prototype-v1' &&
+        data.status == 't0-suspect' && nonblank(data.relawanId) &&
+        data.timestamp is timestamp &&
+        data.gates is list && data.gates.size() >= 1 && data.gates.size() <= 3 
+        && data.gates.toSet().hasOnly([ 'redflag.immediate_harm', 
+        'redflag.severe_mental_state', 'redflag.acute_medical'
+        ]) && data.gates.toSet().size() == data.gates.size() && data.gates.toSet().size() == 
+        data.gates.size() &&
+        optionalNik(data, 'patientNik') && optionalText(data, 'patientName') &&
+        optionalText(data, 'relawanName') && optionalText(data, 'poskoName') &&
+        optionalText(data, 'note') && validCoordinates(data);
+    }
+
+    function validOriginCreate(data) {
+      return validOrigin(data) && data.keys().hasAll(['createdAt']) &&
+        data.createdAt == data.timestamp &&
+        data.keys().hasOnly([
+          'protocolVersion', 'status', 'relawanId', 'gates', 'timestamp', 'createdAt',
+          'patientNik', 'patientName', 'relawanName', 'poskoName', 'lat', 'lng', 'note'
+        ]);
+    }
+
+    function validValidation(value) {
+      return value is map &&
+        value.keys().hasAll(['version', 'outcome', 'reviewerId', 'decidedAt']) &&
+        value.keys().hasOnly([
+          'version', 'outcome', 'downgradedTo', 'clinicalNote', 'reviewerId', 'decidedAt'
+        ]) && value.version == 'secondary-validation-prototype-v1' &&
+        ((value.outcome == 't0-confirmed' && !('downgradedTo' in value)) ||
+         (value.outcome == 'downgraded' && 'downgradedTo' in value &&
+          value.downgradedTo in ['T1', 'T2'])) &&
+        nonblank(value.reviewerId) && value.decidedAt is timestamp &&
+        (!('clinicalNote' in value) ||
+          (nonblank(value.clinicalNote) && value.clinicalNote == value.clinicalNote.trim()));
+    }
+
+    function validReferral(value) {
+      return value is map &&
+        value.keys().hasAll(['version', 'status', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy']) &&
+        value.keys().hasOnly(['version', 'status', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy']) &&
+        value.version == 'referral-prototype-v1' &&
+        value.status in [
+          'waiting-dispatch', 'en-route-to-location', 'arrived-at-posko',
+          'en-route-to-hospital', 'completed'
+        ] && value.createdAt is timestamp && value.updatedAt is timestamp &&
+        value.updatedAt >= value.createdAt &&
+        nonblank(value.createdBy) && nonblank(value.updatedBy);
+    }
+
+    function validInitialReferral(data) {
+      return validReferral(data.referral) &&
+        data.referral.status == 'waiting-dispatch' &&
+        data.referral.createdAt == request.time &&
+        data.referral.updatedAt == request.time &&
+        data.referral.createdBy == request.auth.uid &&
+        data.referral.updatedBy == request.auth.uid;
+    }
+
+    function nextReferralStatus(previous, next) {
+      return (previous == 'waiting-dispatch' && next == 'en-route-to-location') ||
+        (previous == 'en-route-to-location' && next == 'arrived-at-posko') ||
+        (previous == 'arrived-at-posko' && next == 'en-route-to-hospital') ||
+        (previous == 'en-route-to-hospital' && next == 'completed');
+    }
+
+    function validDecisionWrite(before, after) {
+      return validOrigin(before) && !('validation' in before) && !('referral' in before) &&
+        'validation' in after && validValidation(after.validation) &&
+        after.validation.reviewerId == request.auth.uid &&
+        after.validation.decidedAt == request.time &&
+        after.diff(before).affectedKeys().hasOnly(['validation', 'referral']) &&
+        ((after.validation.outcome == 't0-confirmed' &&
+          'referral' in after && validInitialReferral(after)) ||
+         (after.validation.outcome == 'downgraded' && !('referral' in after)));
+    }
+
+    function validReferralAdvance(before, after) {
+      return validOrigin(before) && 'validation' in before &&
+        validValidation(before.validation) && before.validation.outcome == 't0-confirmed' &&
+        'referral' in before && validReferral(before.referral) &&
+        before.referral.createdBy == before.validation.reviewerId &&
+        before.referral.createdAt == before.validation.decidedAt &&
+        'referral' in after && validReferral(after.referral) &&
+        after.diff(before).affectedKeys().hasOnly(['referral']) &&
+        after.referral.diff(before.referral).affectedKeys().hasOnly(['status', 'updatedAt', 'updatedBy']) &&
+        nextReferralStatus(before.referral.status, after.referral.status) &&
+        after.referral.updatedAt == request.time &&
+        after.referral.updatedBy == request.auth.uid;
+    }
+
+    function validPatientCreate(data, patientNik) {
+      return nik(patientNik) && data.keys().hasAll([
+        'nik', 'nama', 'usia', 'jenisKelamin', 'poskoName',
+        'registeredAt', 'registeredBy', 'createdAt'
+      ]) && data.keys().hasOnly([
+        'nik', 'nama', 'usia', 'jenisKelamin', 'poskoName', 'registeredAt',
+        'lastPhase', 'pfaCompleted', 'registeredBy', 'createdAt'
+      ]) && data.nik == patientNik && nonblank(data.nama) &&
+        data.usia is int && data.usia >= 0 && data.usia <= 120 &&
+        data.jenisKelamin in ['L', 'P'] && nonblank(data.poskoName) &&
+        nonblank(data.registeredAt) &&
+        (!('lastPhase' in data) || data.lastPhase in ['akut', 'lanjutan']) &&
+        (!('pfaCompleted' in data) || data.pfaCompleted is bool) &&
+        data.registeredBy == request.auth.uid && data.createdAt == request.time;
+    }
+
+    function validCaseHeader(data) {
+      return data.keys().hasAll(['timestamp', 'createdAt', 'syncedFromOffline']) &&
+        data.timestamp is timestamp && data.createdAt == data.timestamp &&
+        data.syncedFromOffline is bool &&
+        optionalNik(data, 'patientNik') &&
+        !data.keys().hasAny(['validation', 'referral', 'demoSeedKey', 'role']);
+    }
+
+    function validTypedCase(data) {
+      return data.keys().hasAll([
+          'recordType', 'protocolVersion', 'phase', 'patientNik', 'relawanId', 'responses'
+        ]) && data.keys().hasOnly([
+          'recordType', 'protocolVersion', 'phase', 'patientNik', 'relawanId', 'responses',
+          'patientName', 'patientAge', 'patientGender', 'relawanName', 'volunteerName',
+          'poskoName', 'poskoLat', 'poskoLng', 'lat', 'lng', 'location',
+          'timestamp', 'createdAt', 'syncedFromOffline', 'inputMode', 'srq20Score',
+          'baseTier', 'riskFunctionProtocolVersion', 'riskFactors',
+          'functionalImpairment', 'classificationVersion', 'tier'
+        ]) && nik(data.patientNik) && data.relawanId == request.auth.uid &&
+        data.responses is map && data.responses.keys().size() > 0 &&
+        !('uploadedBy' in data) &&
+        ((data.recordType == 'pfa' && data.protocolVersion == 'pfa-prototype-v1' &&
+          data.phase == 'akut' &&
+          !data.keys().hasAny([
+            'inputMode', 'srq20Score', 'baseTier', 'riskFunctionProtocolVersion',
+            'riskFactors', 'functionalImpairment', 'classificationVersion', 'tier'
+          ])) ||
+         (data.recordType == 'srq20' && data.protocolVersion == 'srq20-prototype-v1' &&
+          data.phase == 'lanjutan' &&
+          data.keys().hasAll([
+            'inputMode', 'srq20Score', 'baseTier', 'riskFunctionProtocolVersion',
+            'riskFactors', 'functionalImpairment', 'classificationVersion', 'tier'
+          ]) && data.inputMode in ['verbal', 'nonverbal'] &&
+          data.srq20Score is int && data.srq20Score >= 0 && data.srq20Score <= 20 &&
+          data.baseTier in ['T1', 'T2', 'T3'] && data.tier in ['T1', 'T2', 'T3'] &&
+          data.riskFunctionProtocolVersion == 'risk-function-prototype-v1' &&
+          data.classificationVersion == 'classification-prototype-v1' &&
+          data.riskFactors is map && data.functionalImpairment is map));
+    }
+
+    function validLegacyOwner(data) {
+      return ('relawanId' in data && data.relawanId == request.auth.uid &&
+          !('uploadedBy' in data)) ||
+        (!('relawanId' in data) && 'uploadedBy' in data &&
+          data.uploadedBy == request.auth.uid);
+    }
+
+    function validLegacyCase(data) {
+      return data.keys().hasAll(['zona', 'triageResult']) &&
+        data.keys().hasOnly([
+          'recordType', 'protocolVersion', 'zona', 'triageResult', 'jalur', 'type',
+          'relawanId', 'uploadedBy', 'relawanName', 'volunteerName', 'poskoName',
+          'patientNik', 'patientName', 'patientAge', 'patientGender', 'phase',
+          'poskoLat', 'poskoLng', 'lat', 'lng', 'location', 'transcript',
+          'detectedKeywords', 'keywords', 'criticalItems', 'warningItems',
+          'checklistAnswers', 'pfaShown', 'needsPFA', 'score',
+          'timestamp', 'createdAt', 'syncedFromOffline'
+        ]) &&
+        (!('recordType' in data) || data.recordType == 'legacy-triage') &&
+        (!('protocolVersion' in data) || data.protocolVersion == 'legacy-demo-v1') &&
+        validLegacyOwner(data) &&
+        data.zona in ['merah', 'kuning', 'hijau'] &&
+        data.triageResult == data.zona.upper() &&
+        (!('phase' in data) || data.phase in ['akut', 'lanjutan']);
+    }
+
+    function caseOwner(data) {
+      return ('relawanId' in data && data.relawanId == request.auth.uid) ||
+        (!('relawanId' in data) && 'uploadedBy' in data &&
+         data.uploadedBy == request.auth.uid);
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid &&
+        request.auth.token.email is string &&
+        request.resource.data.keys().hasAll([
+          'uid', 'email', 'name', 'role', 'poskoName', 'poskoLat', 'poskoLng', 'createdAt'
+        ]) && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'name', 'role', 'poskoName', 'poskoLat', 'poskoLng', 'createdAt'
+        ]) && request.resource.data.uid == uid &&
+        request.resource.data.role == 'relawan' &&
+        request.resource.data.email == request.auth.token.email &&
+        nonblank(request.resource.data.name) &&
+        nonblank(request.resource.data.poskoName) &&
+        request.resource.data.poskoLat is number &&
+        request.resource.data.poskoLat >= -90 && request.resource.data.poskoLat <= 90 &&
+        request.resource.data.poskoLng is number &&
+        request.resource.data.poskoLng >= -180 && request.resource.data.poskoLng <= 180 &&
+        nonblank(request.resource.data.createdAt);
+    }
+
+    match /patients/{patientNik} {
+      allow get, list: if isRelawan() || isNakes();
+      allow create: if isRelawan() && validPatientCreate(request.resource.data, patientNik);
+    }
+
+    match /cases/{caseId} {
+      allow get, list: if isRelawan() || isNakes() || isAdmin();
+      allow create: if isRelawan() && validCaseHeader(request.resource.data) &&
+        (validTypedCase(request.resource.data) || validLegacyCase(request.resource.data));
+      allow update: if isRelawan() && caseOwner(resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().size() == 0;
+    }
+
+    match /emergencies/{emergencyId} {
+      allow get, list: if isNakes() || isAdmin();
+      allow create: if isRelawan() && validOriginCreate(request.resource.data) &&
+        request.resource.data.relawanId == request.auth.uid;
+      allow update: if
+        (isRelawan() && resource.data.relawanId == request.auth.uid &&
+         request.resource.data.diff(resource.data).affectedKeys().size() == 0) ||
+        (isNakes() &&
+         (validDecisionWrite(resource.data, request.resource.data) ||
+          validReferralAdvance(resource.data, request.resource.data)));
+    }
+  }
+}

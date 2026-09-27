@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 import { emergencyEventSchema } from '../schemas/emergencyRecord.js';
+import { normalizeWorkflowForRead, parseEmergencyWorkflow } from '../schemas/emergencyWorkflow.js';
 
 // A cloud document may gain independent Faskes metadata. Strip those fields
 // only at this read boundary; the Relawan event and local schemas stay strict.
@@ -21,7 +22,7 @@ export function parseEmergencySnapshot(snapshot) {
     throw new Error('Waktu emergency tidak valid.');
   }
   const origin = cloudOriginSchema.parse({ ...data, timestamp: time.toISOString() });
-  return { id: snapshot.id, origin };
+  return { id: snapshot.id, origin, ...normalizeWorkflowForRead(parseEmergencyWorkflow(data)) };
 }
 
 export function collectEmergencyQueue(querySnapshot) {

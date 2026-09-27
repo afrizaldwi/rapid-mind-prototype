@@ -10,7 +10,7 @@ const gateLabels = new Map(RED_FLAG_PROTOCOL.indicators.map(({ id, label }) => [
 const timeFormat = new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
 
 function EmergencyCard({ emergency }) {
-  const { id, origin } = emergency;
+  const { id, origin, workflowIssue } = emergency;
   const hasLocation = origin.lat !== undefined && origin.lng !== undefined;
   return (
     <article className="rounded-xl border border-red-200 bg-white p-4 shadow-sm sm:p-5">
@@ -38,6 +38,7 @@ function EmergencyCard({ emergency }) {
         <p className="mt-2 text-xs text-slate-500">Wording indikator masih provisional dan belum tervalidasi klinis.</p>
       </div>
       {origin.note && <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"><span className="font-semibold">Catatan:</span> {origin.note}</p>}
+      {workflowIssue && <p role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Metadata alur Faskes tidak valid. T0-Suspect tetap terlihat; tindakan untuk catatan ini perlu ditahan sampai data diperbaiki.</p>}
       <p className="mt-4 flex items-center gap-1.5 text-sm text-slate-600">
         <MapPin className="h-4 w-4" />
         {hasLocation ? `Koordinat posko: ${origin.lat}, ${origin.lng}` : 'Koordinat tidak tersedia'}

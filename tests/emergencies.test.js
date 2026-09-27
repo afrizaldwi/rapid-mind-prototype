@@ -170,12 +170,34 @@ describe('local-first emergency persistence and cloud retry', () => {
     await expect(pushEmergencyToFirestore(id)).rejects.toThrow('local mark failed');
     const firestoreId = state.rows.get(id).firestoreId;
     expect(state.rows.get(id).synced).toBe(0);
-    state.cloud.set(firestoreId, { ...state.cloud.get(firestoreId), independentCloudMetadata: 'preserve me' });
+    state.cloud.set(firestoreId, { ...state.cloud.get(firestoreId),
+      validation: { outcome: 't0-confirmed' }, referral: { status: 'waiting-dispatch' },
+      independentCloudMetadata: 'preserve me' });
+    const beforeRetry = structuredClone(state.cloud.get(firestoreId));
     await pushEmergencyToFirestore(id);
     expect(state.setDoc.mock.calls.map(([reference]) => reference.id)).toEqual([firestoreId, firestoreId]);
     expect(state.allocations).toHaveBeenCalledOnce();
     expect(state.cloud.get(firestoreId).independentCloudMetadata).toBe('preserve me');
+    expect(state.cloud.get(firestoreId)).toEqual(beforeRetry);
     expect(state.cloud.size).toBe(1);
+  });
+
+  it('keeps a changed origin pending when a field-level policy rejects its retry', async () => {
+    const id = await saveEmergencyLocally(event());
+    state.emergencies.update.mockImplementationOnce(async (rowId, patch) => Object.assign(state.rows.get(rowId), patch));
+    state.emergencies.update.mockRejectedValueOnce(new Error('local mark failed'));
+    await expect(pushEmergencyToFirestore(id)).rejects.toThrow('local mark failed');
+    const firestoreId = state.rows.get(id).firestoreId;
+    const original = state.cloud.get(firestoreId);
+    state.rows.get(id).note = 'changed after creation';
+    state.setDoc.mockImplementationOnce(async (_reference, payload) => {
+      if (Object.entries(payload).some(([key, value]) => JSON.stringify(value) !== JSON.stringify(original[key]))) {
+        throw new Error('permission-denied');
+      }
+    });
+    await expect(pushEmergencyToFirestore(id)).rejects.toThrow('permission-denied');
+    expect(state.rows.get(id).synced).toBe(0);
+    expect(state.cloud.get(firestoreId)).toEqual(original);
   });
 
   it('serializes only event fields and Firestore timestamps', async () => {
