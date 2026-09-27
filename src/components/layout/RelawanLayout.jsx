@@ -4,6 +4,7 @@ import { Brain, Home, PlusCircle, ClipboardList, LogOut, WifiOff, CheckCircle } 
 import { useAuth } from '../../hooks/useAuth';
 import { useAssessment } from '../../hooks/useAssessment';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
+import { clearPfaDraft } from '../../lib/pfa';
 
 export default function RelawanLayout() {
   const { userProfile, logout } = useAuth();
@@ -15,6 +16,7 @@ export default function RelawanLayout() {
   const navigate = useNavigate();
   const [showSyncToast, setShowSyncToast] = useState(false);
   const isAssessmentPath = location.pathname === '/relawan/patient-lookup' ||
+                           location.pathname === '/relawan/pfa' ||
                            location.pathname === '/relawan/triage' ||
                            location.pathname.startsWith('/relawan/triage/');
   
@@ -22,6 +24,7 @@ export default function RelawanLayout() {
   const hideBottomNav = location.pathname.includes('/triage/verbal') || 
                         location.pathname.includes('/triage/nonverbal') || 
                         location.pathname.includes('/triage/result') ||
+                        location.pathname === '/relawan/pfa' ||
                         location.pathname.includes('/patient-lookup');
 
   useEffect(() => {
@@ -41,6 +44,7 @@ export default function RelawanLayout() {
 
   const handleLogout = async () => {
     clearAssessment();
+    clearPfaDraft();
     await logout();
     navigate('/login');
   };

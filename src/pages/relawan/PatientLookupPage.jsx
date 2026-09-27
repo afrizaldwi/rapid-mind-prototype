@@ -17,8 +17,9 @@ import { useAuth } from "../../hooks/useAuth";
 import { useAssessment } from "../../hooks/useAssessment";
 import { localDb } from "../../lib/db";
 import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
+import { clearPfaDraft, getPfaProgressState } from "../../lib/pfa";
 import { lookupPatient, registerPatient } from "../../lib/patients";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocsFromServer } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 // ───────────────────────────────────────────────
@@ -56,34 +57,50 @@ function historyBadge(record) {
 export default function PatientLookupPage() {
   const navigate = useNavigate();
   const { user, userProfile } = useAuth();
-  const { startAssessment } = useAssessment();
+  const { assessment, startAssessment, clearAssessment } = useAssessment();
 
   const [nik, setNik] = useState("");
   const [nama, setNama] = useState("");
   const [usia, setUsia] = useState("");
   const [jenisKelamin, setJenisKelamin] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [lookupResult, setLookupResult] = useState(null); // null | { found: boolean, patient?, history? }
+  const [lookupResult, setLookupResult] = useState(null); // null | { found: boolean, patient?, history?, cloudVerified? }
   const [error, setError] = useState("");
+  const [pendingAction, setPendingAction] = useState(null);
 
   // ──────────── NIK validation ────────────
   const isNikValid = /^\d{16}$/.test(nik);
   const isFormComplete = isNikValid && nama.trim() && usia.trim() && jenisKelamin;
+  const pfaProgress = lookupResult?.found ? getPfaProgressState({
+    history: lookupResult.history,
+    cloudVerified: lookupResult.cloudVerified,
+    assessment,
+    patientNik: lookupResult.patient.nik,
+  }) : null;
+
+  const needsAbandonment = (targetNik, action) => {
+    if (assessment && assessment.patient?.nik !== targetNik) {
+      setPendingAction(action);
+      return true;
+    }
+    return false;
+  };
 
   const loadHistory = async (patientNik) => {
     const localCases = await localDb.cases.where("patientNik").equals(patientNik).toArray();
-    if (!navigator.onLine) return localCases;
+    if (!navigator.onLine) return { history: localCases, cloudVerified: false };
     try {
-      const snapshot = await getDocs(query(collection(db, "cases"), where("patientNik", "==", patientNik)));
+      const snapshot = await getDocsFromServer(query(collection(db, "cases"), where("patientNik", "==", patientNik)));
       const localCloudIds = new Set(localCases.map((item) => item.firestoreId).filter(Boolean));
       const cloudCases = snapshot.docs.filter((item) => !localCloudIds.has(item.id)).map((item) => ({ id: item.id, ...item.data() }));
-      return [...localCases, ...cloudCases].sort((a, b) => {
+      const history = [...localCases, ...cloudCases].sort((a, b) => {
         const date = (item) => new Date(item.timestamp?.toDate?.() || item.timestamp || 0).getTime() || 0;
         return date(b) - date(a);
       });
+      return { history, cloudVerified: true };
     } catch (error) {
       console.error("Gagal memuat riwayat cloud:", error);
-      return localCases;
+      return { history: localCases, cloudVerified: false };
     }
   };
 
@@ -100,11 +117,12 @@ export default function PatientLookupPage() {
     try {
       const result = await lookupPatient(nik, navigator.onLine);
       if (result) {
-        const history = await loadHistory(nik);
+        const { history, cloudVerified } = await loadHistory(nik);
         setLookupResult({
           found: true,
           patient: result.patient,
           history,
+          cloudVerified,
           source: result.source,
         });
         setNama(result.patient.nama || nama);
@@ -122,8 +140,9 @@ export default function PatientLookupPage() {
   };
 
   // ──────────── Register new patient & navigate ────────────
-  const handleRegisterAndProceed = async () => {
+  const handleRegisterAndProceed = async (allowReplace = false) => {
     if (!isFormComplete) return;
+    if (!allowReplace && needsAbandonment(nik, 'register')) return;
 
     const patientData = {
       nik,
@@ -140,38 +159,68 @@ export default function PatientLookupPage() {
     try {
       const result = await registerPatient(patientData, navigator.onLine);
       if (result.existing) {
-        const history = await loadHistory(nik);
-        setLookupResult({ found: true, patient: result.patient, history, source: "local" });
+        const { history, cloudVerified } = await loadHistory(nik);
+        setLookupResult({ found: true, patient: result.patient, history, cloudVerified, source: "local" });
         setError("NIK sudah terdaftar. Gunakan data pasien yang ditemukan.");
         return;
       }
       startAssessment({ patient: result.patient, phase: "akut", isNewPatient: true });
-      // Falls back to triage until the dedicated PFA flow is built.
-      navigate("/relawan/triage");
+      navigate("/relawan/pfa");
     } catch (err) {
       console.error("Registration error:", err);
       setError(err.name === "PatientConflictError" ? err.message : "Gagal menyimpan data pasien.");
     }
   };
 
-  // ──────────── Navigate to SRQ-20 for returning patients ────────────
-  const handleProceedExisting = () => {
+  // ──────────── Continue the phase supported by completed case history ────────────
+  const handleProceedExisting = (allowReplace = false) => {
     if (!lookupResult?.patient) return;
 
     const patient = lookupResult.patient;
+    const progress = getPfaProgressState({
+      history: lookupResult.history,
+      cloudVerified: lookupResult.cloudVerified,
+      assessment,
+      patientNik: patient.nik,
+    });
+    if (progress === 'unknown') return;
+    if (!allowReplace && needsAbandonment(patient.nik, 'existing')) return;
 
     try {
-      startAssessment({
-        patient,
-        phase: "lanjutan",
-        previousHistory: lookupResult.history || [],
-      });
-      // Falls back to triage until the dedicated SRQ-20 flow is built.
-      navigate("/relawan/triage");
+      if (progress === 'completed') {
+        startAssessment({
+          patient,
+          phase: "lanjutan",
+          previousHistory: lookupResult.history || [],
+        });
+        // Falls back to triage until the dedicated SRQ-20 flow is built.
+        navigate("/relawan/triage");
+      } else if (progress === 'in-progress') {
+        navigate("/relawan/pfa");
+      } else {
+        if (assessment?.patient?.nik !== patient.nik || assessment?.phase !== 'akut') {
+          startAssessment({
+            patient,
+            phase: "akut",
+            previousHistory: lookupResult.history || [],
+            isNewPatient: false,
+          });
+        }
+        navigate("/relawan/pfa");
+      }
     } catch (err) {
       console.error("Assessment error:", err);
       setError("Data pasien tidak valid. Cari ulang pasien.");
     }
+  };
+
+  const handleConfirmAbandonment = () => {
+    const action = pendingAction;
+    setPendingAction(null);
+    clearAssessment();
+    clearPfaDraft();
+    if (action === 'register') void handleRegisterAndProceed(true);
+    if (action === 'existing') handleProceedExisting(true);
   };
 
   // ──────────── Demo quick-fill ────────────
@@ -288,7 +337,10 @@ export default function PatientLookupPage() {
                   Penyintas Ditemukan
                 </h3>
                 <p className="text-xs text-amber-600 mt-0.5">
-                  NIK sudah terdaftar. Riwayat asesmen tersedia.
+                  {pfaProgress === 'completed' ? 'PFA telah selesai. Riwayat asesmen tersedia.' :
+                    pfaProgress === 'in-progress' ? 'PFA belum selesai. Asesmen aktif dapat dilanjutkan.' :
+                    pfaProgress === 'incomplete' ? 'PFA belum selesai. Lanjutkan asesmen fase akut.' :
+                    'Status PFA belum dapat diverifikasi.'}
                 </p>
               </div>
             </div>
@@ -361,14 +413,24 @@ export default function PatientLookupPage() {
               </div>
             )}
 
-            {/* Action: Proceed to SRQ-20 */}
-            <button
-              onClick={handleProceedExisting}
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              Lanjutkan ke Wawancara SRQ-20
-              <ChevronRight className="w-5 h-5" />
-            </button>
+            {pfaProgress === 'unknown' ? (
+              <div className="space-y-3">
+                <p className="text-sm text-amber-800">Riwayat cloud belum dapat diperiksa. Sambungkan internet lalu cari ulang agar status asesmen tidak salah.</p>
+                <button type="button" onClick={handleLookup} disabled={isSearching}
+                  className="w-full rounded-xl bg-amber-500 py-3 font-bold text-white disabled:opacity-50">
+                  {isSearching ? 'Mencari...' : 'Coba Lagi'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleProceedExisting()}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
+              >
+                {pfaProgress === 'completed' ? 'Lanjutkan ke Wawancara SRQ-20' :
+                  pfaProgress === 'in-progress' ? 'Lanjutkan PFA' : 'Mulai / Lanjutkan PFA'}
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            )}
           </div>
         )}
 
@@ -472,7 +534,7 @@ export default function PatientLookupPage() {
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
           <div className="max-w-md mx-auto">
             <button
-              onClick={handleRegisterAndProceed}
+              onClick={() => handleRegisterAndProceed()}
               disabled={!isFormComplete}
               className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl disabled:bg-gray-300 transition-colors shadow-sm flex items-center justify-center gap-2"
             >
@@ -484,6 +546,29 @@ export default function PatientLookupPage() {
                 Lengkapi semua data di atas untuk melanjutkan
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {pendingAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="unfinished-assessment-title">
+            <h2 id="unfinished-assessment-title" className="text-lg font-bold text-gray-900">Asesmen Belum Selesai</h2>
+            <p className="mt-2 text-sm text-gray-700">
+              Asesmen untuk {assessment?.patient?.nama || 'penyintas lain'} belum selesai. Memulai asesmen pasien lain akan membatalkan draf yang sedang aktif.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button type="button" onClick={() => navigate(assessment?.phase === 'akut' ? '/relawan/pfa' : '/relawan/triage')}
+                className="rounded-xl border border-blue-600 px-4 py-3 text-sm font-bold text-blue-700">
+                {assessment?.phase === 'akut' ? 'Kembali ke PFA' : 'Kembali ke Asesmen'}
+              </button>
+              <button type="button" onClick={handleConfirmAbandonment}
+                className="rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white">
+                Batalkan Asesmen & Lanjutkan
+              </button>
+              <button type="button" onClick={() => setPendingAction(null)}
+                className="px-4 py-2 text-sm text-gray-600">Tetap di Pencarian</button>
+            </div>
           </div>
         </div>
       )}
