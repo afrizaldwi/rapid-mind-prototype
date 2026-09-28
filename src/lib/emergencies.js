@@ -78,7 +78,7 @@ async function writeEmergency(id) {
   });
   const localEmergency = await localDb.emergencies.get(id);
   if (localEmergency.synced === 1) return firestoreId;
-  await setDoc(doc(db, 'emergencies', firestoreId), serializeEmergencyForFirestore(localEmergency));
+  await setDoc(doc(db, 'emergencies', firestoreId), serializeEmergencyForFirestore(localEmergency), { merge: true });
   await localDb.emergencies.update(id, { synced: 1 });
   return firestoreId;
 }

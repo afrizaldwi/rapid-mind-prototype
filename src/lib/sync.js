@@ -1,5 +1,5 @@
 import { collection, doc, setDoc, Timestamp } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 import localDb from "./db";
 import { findCloudPatientByNik, findLocalPatientByNik, pushPatientToFirestore, syncPendingPatients } from "./patients";
 import { getCaseRecordType, getLegacyZone, validateCaseForSave } from "./caseRecords";
@@ -83,6 +83,24 @@ async function writeCase(localId) {
   if (!current) throw new Error("Kasus lokal tidak ditemukan");
   if (current.synced === 1) return current.firestoreId;
   validateCaseForSave(current);
+  const uploaderId = auth.currentUser?.uid;
+  if (!uploaderId) throw new Error("Akun Relawan tidak tersedia untuk sinkronisasi kasus.");
+  await localDb.transaction("rw", localDb.cases, async () => {
+    const latest = await localDb.cases.get(localId);
+    if (!latest) throw new Error("Kasus lokal tidak ditemukan");
+    if (Object.hasOwn(latest, 'relawanId')) {
+      if (latest.relawanId !== uploaderId) throw new Error("Kasus pending milik Relawan lain.");
+      if (Object.hasOwn(latest, 'uploadedBy')) throw new Error("Atribusi kasus pending tidak konsisten.");
+      return;
+    }
+    if (getCaseRecordType(latest) !== 'legacy-triage') {
+      throw new Error("Kasus bertipe harus memiliki Relawan pemilik.");
+    }
+    if (Object.hasOwn(latest, 'uploadedBy') && latest.uploadedBy !== uploaderId) {
+      throw new Error("Kasus legacy pending sudah terikat ke Relawan lain.");
+    }
+    if (!Object.hasOwn(latest, 'uploadedBy')) await localDb.cases.update(localId, { uploadedBy: uploaderId });
+  });
   await ensureCasePatientReady(current.patientNik);
 
   const allocatedId = doc(collection(db, "cases")).id;

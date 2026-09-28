@@ -8,7 +8,6 @@ import {
   Lock,
   User,
   MapPin,
-  Shield,
   AlertCircle,
 } from "lucide-react";
 
@@ -27,7 +26,6 @@ export default function RegisterPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    role: "relawan",
     poskoName: POSKO_LIST[0].name,
   });
   const [error, setError] = useState("");
@@ -59,12 +57,11 @@ export default function RegisterPage() {
         POSKO_LIST.find((p) => p.name === formData.poskoName) || POSKO_LIST[0];
       await register(formData.email, formData.password, {
         name: formData.name,
-        role: formData.role,
         poskoName: selectedPosko.name,
         poskoLat: selectedPosko.lat,
         poskoLng: selectedPosko.lng,
       });
-      navigate(formData.role === "admin" ? "/admin" : "/relawan");
+      navigate("/relawan");
     } catch (err) {
       switch (err.code) {
         case "auth/email-already-in-use":
@@ -183,50 +180,9 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Role */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Peran
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label
-                  className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-all ${
-                    formData.role === "relawan"
-                      ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500/20"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="role"
-                    value="relawan"
-                    checked={formData.role === "relawan"}
-                    onChange={handleChange}
-                    className="hidden"
-                  />
-                  <Shield className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium">Relawan</span>
-                </label>
-                <label
-                  className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-all ${
-                    formData.role === "admin"
-                      ? "border-purple-500 bg-purple-50 ring-2 ring-purple-500/20"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="role"
-                    value="admin"
-                    checked={formData.role === "admin"}
-                    onChange={handleChange}
-                    className="hidden"
-                  />
-                  <User className="w-4 h-4 text-purple-600" />
-                  <span className="text-sm font-medium">Admin</span>
-                </label>
-              </div>
-            </div>
+            <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+              Pendaftaran mandiri hanya untuk Relawan. Akun Nakes dan Admin disiapkan oleh pengelola.
+            </p>
 
             {/* Posko */}
             <div>

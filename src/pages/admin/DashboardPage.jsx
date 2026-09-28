@@ -1,22 +1,17 @@
 import { useState, useEffect } from "react";
-import { collection, query, getDocs, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "../../lib/firebase";
-import { useAuth } from "../../hooks/useAuth";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import {
   AlertTriangle,
   AlertCircle,
   CheckCircle,
   Activity,
-  Database,
 } from "lucide-react";
-import { seedDemoData } from "../../lib/seed";
 import { getCaseRecordType, getLegacyZone } from "../../lib/caseRecords";
 
 export default function DashboardPage() {
-  const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [seeding, setSeeding] = useState(false);
   const [stats, setStats] = useState({
     merah: 0,
     kuning: 0,
@@ -77,21 +72,6 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, []);
 
-  const handleSeed = async () => {
-    if (seeding) return;
-    setSeeding(true);
-    try {
-      await seedDemoData();
-      alert("Dataset demo dipastikan tersedia di Firebase tanpa menambah salinan baru.");
-      window.location.reload();
-    } catch (error) {
-      console.error("Error seeding data:", error);
-      alert("Gagal menambahkan data simulasi: " + error.message);
-    } finally {
-      setSeeding(false);
-    }
-  };
-
   const pieData = [
     { name: "Merah", value: stats.merah, color: COLORS.merah },
     { name: "Kuning", value: stats.kuning, color: COLORS.kuning },
@@ -115,14 +95,6 @@ export default function DashboardPage() {
             Ringkasan data triase psikologis posko bencana
           </p>
         </div>
-        <button
-          onClick={handleSeed}
-          disabled={seeding}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-sm font-medium border border-blue-200 transition-colors self-start sm:self-auto disabled:opacity-50"
-        >
-          <Database className="w-4 h-4" />
-          {seeding ? "Membuat Data..." : "Isi Data Simulasi Demo"}
-        </button>
       </div>
 
       {/* Stats Cards */}

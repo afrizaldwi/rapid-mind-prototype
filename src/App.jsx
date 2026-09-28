@@ -7,6 +7,7 @@ import { AssessmentProvider } from './contexts/AssessmentContext'
 // Layouts
 import RelawanLayout from './components/layout/RelawanLayout'
 import AdminLayout from './components/layout/AdminLayout'
+import FaskesLayout from './components/layout/FaskesLayout'
 
 // Auth Pages
 import LoginPage from './pages/LoginPage'
@@ -30,6 +31,8 @@ import DashboardPage from './pages/admin/DashboardPage'
 import MapPage from './pages/admin/MapPage'
 import CasesPage from './pages/admin/CasesPage'
 import StatsPage from './pages/admin/StatsPage'
+import EmergencyQueuePage from './pages/faskes/EmergencyQueuePage'
+import EmergencyDetailPage from './pages/faskes/EmergencyDetailPage'
 
 function App() {
   return (
@@ -63,6 +66,19 @@ function App() {
             <Route path="triage/result" element={<ResultPage />} />
           </Route>
           <Route path="history" element={<HistoryPage />} />
+        </Route>
+
+        {/* Nakes / Faskes Routes */}
+        <Route
+          path="/faskes"
+          element={
+            <ProtectedRoute allowedRole="nakes">
+              <FaskesLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<EmergencyQueuePage />} />
+          <Route path="emergencies/:id" element={<EmergencyDetailPage />} />
         </Route>
 
         {/* Admin Routes */}

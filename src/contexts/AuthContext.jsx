@@ -7,6 +7,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDocFromCache, getDocFromServer } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
+import { getHomeRouteForRole } from "../lib/authRoles";
 
 export const AuthContext = createContext(null);
 
@@ -20,7 +21,7 @@ export function AuthProvider({ children }) {
     const request = ++profileRequest.current;
     const uid = firebaseUser.uid;
     const current = () => request === profileRequest.current && auth.currentUser?.uid === uid;
-    const ready = (profile) => profile?.role === "relawan" || profile?.role === "admin";
+    const ready = (profile) => !!getHomeRouteForRole(profile?.role);
     setProfileState((previous) => previous.uid === uid && previous.status === "ready"
       ? previous : { uid, status: "loading", profile: null, issue: null });
 
@@ -96,10 +97,12 @@ export function AuthProvider({ children }) {
 
   const register = async (email, password, profileData) => {
     const result = await createUserWithEmailAndPassword(auth, email, password);
+    if (!result.user.email) throw new Error("Email akun Firebase tidak tersedia.");
     // Simpan profil ke Firestore
     const profile = {
       ...profileData,
-      email,
+      role: "relawan",
+      email: result.user.email,
       uid: result.user.uid,
       createdAt: new Date().toISOString(),
     };
@@ -131,6 +134,7 @@ export function AuthProvider({ children }) {
     logout,
     isAuthenticated: !!user,
     isRelawan: userProfile?.role === "relawan",
+    isNakes: userProfile?.role === "nakes",
     isAdmin: userProfile?.role === "admin",
   };
 

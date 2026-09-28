@@ -2,8 +2,8 @@
 
 > **Dokumen:** Implementation & Changelog Notes  
 > **Ruang Lingkup:** Track A — Poin 1 (Screen 2: Identitas Penyintas & Auto-Lookup System)  
-> **Tanggal:** 25 September 2026  
-> **Status:** Phase 2C selesai untuk scope prototipe terpilih: source, 216/216 tes otomatis, dan smoke test browser A–J **PASS**. Hasil smoke test Phase 0/1 dan Phase 2B tetap sebagaimana tercatat. Belum ada suite E2E penuh. Migrasi Dexie v2 berisi data → v4 **NOT RUNTIME TESTED**.
+> **Tanggal Pembaruan**: 28 September 2026  
+> **Status**: Phase 3.2B COMPLETE / PASS untuk selected prototype scope; Phase 3.2A security gate tetap terbuka.
 ---
 
 ## 1. Ringkasan Eksekutif
@@ -297,3 +297,92 @@ Phase 0 ditutup untuk prototipe saat ini. Milestone pengembangan berikutnya adal
   9. **J — regresi terpilih:** Red Flag tersedia pada layar longitudinal; PFA, logout, pembatalan/pindah pasien, dan triase legacy eksplisit tetap berfungsi.
 - Smoke A–J di atas adalah pemeriksaan browser manual terpilih, bukan suite E2E penuh. Tes otomatis berbasis mock tetap terpisah dari bukti runtime browser.
 - Batas tetap terbuka: belum ada suite E2E penuh; migrasi Dexie v2 berisi data → v4 **NOT RUNTIME TESTED**; hidrasi `/relawan/history` lintas browser dan hardening idempotensi penyelesaian PFA terpisah; wording protokol/klinis masih provisional; algoritme adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED**; akurasi Whisper lokal tetap keterbatasan terpisah; validasi T0 oleh Faskes tetap Phase 3.
+
+## Phase 3.1 — Faskes Foundation + Real-Time Emergency Reception (27 September 2026)
+
+- Role `nakes` diterima dari profil Firestore pada AuthContext, dengan route `/faskes` dan redirect langsung sesuai `relawan → /relawan`, `nakes → /faskes`, `admin → /admin`. Login menunggu siklus profil AuthContext dan mempertahankan pemulihan profil cache/offline. Guard Relawan/Admin tetap terpisah. Pendaftaran mandiri sekarang hanya membuat profil Relawan; akun Nakes/Admin demo harus diprovisi manual di Firebase Auth dan `users/{uid}`. Perubahan UI/client ini bukan kontrol otorisasi backend.
+- `FaskesLayout` menyediakan identitas, nama akun, logout, navigasi antrean, dan sinyal browser online/offline. `EmergencyQueuePage` memakai `onSnapshot` pada `emergencies`, melepas listener saat unmount, dan menampilkan T0-Suspect terbaru lebih dahulu tanpa polling/refresh. Jumlah antrean berasal dari listener yang sama; kartu menampilkan waktu, pasien/NIK bila ada, posko, Relawan, indikator berlabel, catatan, dan ketersediaan koordinat. Label Red Flag tetap provisional, bukan kriteria klinis tervalidasi. Status loading, kosong, cache/offline, error listener, dan retry manual tersedia.
+- Pembaca cloud memproses setiap dokumen secara independen. Firestore `timestamp` adalah waktu origin yang wajib: dikonversi ke ISO lalu divalidasi dengan kontrak event `t0-suspect` yang sama. `createdAt` dan metadata tambahan ditoleransi sebagai field cloud dan tidak menjadi syarat origin. Satu dokumen malformed masuk daftar ID ditolak tanpa menghilangkan emergency valid. Event lokal tetap schema strict; status workflow Faskes tidak dibuat pada fase ini.
+- Retry Relawan tetap local-first dengan `synced: 0/1`, Firestore ID yang disimpan sebelum upload, dan coalescing pada row yang sama. `setDoc(..., { merge: true })` mengganti hanya field origin yang diserialisasi dan mempertahankan field cloud independen ketika retry normal, termasuk bila write cloud sukses tetapi update `synced` lokal gagal. **Merge tidak memberi otorisasi backend tingkat field.** Jalur read emergency Nakes lulus uji runtime Phase 3.1. Deployed Firestore Security Rules untuk write workflow Phase 3.2 tetap **NEEDS VERIFICATION**, termasuk pembatasan penetapan role, create/retry origin Relawan, dan update field workflow hanya oleh Nakes. Pada gate Phase 3.1 belum ada `firestore.rules` atau binding lokal; keduanya ditambahkan pada source Phase 3.2A di bawah, tetapi belum deployed.
+- **Validasi otomatis/source:** `npm test` **222/222 PASS** (11 file). Tes baru mencakup normalisasi Timestamp, toleransi `createdAt`/field cloud tambahan, penolakan origin malformed, emergency tanpa pasien, isolasi dokumen rusak, urutan/deduplikasi antrean, route role, dan preservasi metadata pada retry ID sama. `npm run lint` exit 0 tanpa warning baru; `npm run build` PASS dengan warning lama dependency `eval` dan ukuran bundle; `git diff --check` PASS. Tes mock/unit sendiri tidak membuktikan listener Firestore, rules, atau UX dua browser; smoke browser terpilih di bawah memverifikasi perilaku runtime Phase 3.1.
+- **Gate browser Phase 3.1 — PASS untuk scope prototipe terpilih (dilaporkan pengguna):**
+  1. Akun Firebase Auth Nakes dan profil `users/{uid}` yang sesuai berhasil login.
+  2. Relawan menuju `/relawan`, Nakes `/faskes`, dan Admin `/admin`; akses wrong-role kembali ke home role akun yang sedang login.
+  3. Sesi browser Relawan dan Faskes terpisah bekerja.
+  4. T0-Suspect linked muncul di antrean Faskes lewat Firestore `onSnapshot` tanpa refresh.
+  5. Pasien/NIK, posko, Relawan, label Red Flag, catatan/lokasi bila ada, dan timestamp tampil benar.
+  6. T0-Suspect tanpa pasien aktif memakai fallback anonim tanpa identitas pasien buatan.
+  7. Urutan antrean terbaru lebih dulu dan event tidak terduplikasi.
+  8. T0-Suspect yang dibuat saat Relawan offline tetap pending lokal; setelah reconnect terunggah dan muncul sekali di Faskes tanpa refresh.
+  9. Dokumen emergency Firestore yang sengaja malformed dilaporkan terpisah; emergency valid tetap terlihat.
+  10. Setelah dokumen malformed dihapus, peringatan hilang tanpa refresh.
+  11. Tampilan Faskes saat browser offline/cache/reconnect bekerja benar.
+  12. Registrasi publik hanya menawarkan Relawan; login Relawan/Admin lama tetap bekerja.
+- Hasil di atas adalah smoke browser manual terpilih, **bukan suite E2E penuh** atau verifikasi otorisasi backend field-level. Phase 3.1 selesai untuk scope prototipe terpilih; Phase 3.2 **Secondary Validation + Referral Workflow** belum dimulai.
+- Caveat lama tetap berlaku: tidak ada full E2E suite; migrasi Dexie v2 berisi data → v4 **NOT RUNTIME TESTED**; History Relawan lintas browser tetap lokal; hardening idempotensi PFA terbuka; wording klinis/protokol provisional; klasifikasi SRQ/Risk-Function belum divalidasi klinis; algoritme adjustment Risk/Function belum didefinisikan; akurasi Whisper lokal terbatas; T0 Red Flag terpisah dari tier SRQ; dan kompatibilitas triase legacy dipertahankan.
+
+## Phase 3.2A — Security + Workflow Write Foundation (source lokal)
+
+- `firestore.rules` menambahkan match eksplisit untuk `users`, `patients`, `cases`, dan `emergencies`, role dari `users/{auth.uid}`, serta default deny tanpa fallback Test Mode. `firebase.json` hanya mengikat file Rules lokal, tanpa project ID. Rules **belum deployed**; Console masih harus diganti dan diverifikasi pemilik proyek.
+- Profil pendaftaran memakai email kanonik `result.user.email` dari Firebase Auth. Rule create hanya menerima profil `relawan` pada `users/{auth.uid}` dengan UID dan email token yang cocok. Nakes/Admin tetap diprovisi manual di luar pendaftaran publik.
+- Pasien dan kasus pending lokal lama yang belum memiliki atribusi ditautkan ke UID Relawan aktif sebelum operasi cloud pertama, termasuk lookup pasien; atribusi itu bertahan saat lookup atau write gagal, dan akun Relawan lain pada browser yang sama tidak boleh mengambil alih. Pasien cloud yang sudah ada tetap direktori bersama. Kasus legacy tanpa `recordType` tetap dapat sinkron bila zona legacy valid dan `uploadedBy` stabil. Rules kasus memeriksa kepemilikan, keluarga record, fase/protokol, NIK, zona, Timestamp, dan field terlarang; rincian jawaban dinamis serta klasifikasi klinis tetap divalidasi di aplikasi.
+- Origin emergency tetap `t0-suspect` dan immutable. Retry Relawan memakai ID dan merge saat ini, tetapi aturan update hanya menerima post-write dengan **nol field berubah**, termasuk setelah namespace Faskes ditambahkan. Nakes tidak dapat membuat atau mengubah origin. Validasi Nakes ditulis sekali lewat transaksi; `reviewerId` berasal dari `auth.currentUser.uid`, tanpa `reviewerName`. Konfirmasi T0 membuat referral `waiting-dispatch` dalam transaksi yang sama; downgrade hanya T1/T2 dan tanpa referral. Transisi referral hanya maju satu langkah sampai `completed`, dengan expected state dan Timestamp server.
+- Pembaca cloud kini memisahkan origin, validation, referral, dan `workflowIssue`. Origin malformed tetap diisolasi per dokumen; workflow malformed/inconsistent hanya menandai warning pada kartu sehingga origin valid tidak menghilang. Layanan transaksi menolak record bermasalah. Faskes masih read-only pada UI Phase 3.2A; aksi UI dan Tele-Emergency adalah Phase 3.2B. Browser offline, cache, dan listener error harus menonaktifkan aksi nanti; tidak ada antrean keputusan klinis offline.
+- Tombol seed Admin dan fungsi Firestore client `seedDemoData()` dihapus. `src/lib/seed.js` hanya menyimpan contoh data historis, bukan mekanisme provisioning yang diotorisasi. Dokumen demo lama dapat dibaca; dataset baru perlu diprovisi lewat jalur berprivilege terpisah.
+- **Prasyarat deployment:** sebelum Rules baru dipublikasikan, audit manual Firebase Authentication dan dokumen Firestore `users` untuk setiap Nakes/Admin. ID `users/{uid}` harus sama dengan UID Authentication, akun harus sengaja diprovisi, dan `role` harus benar. Profil berprivilege yang tak diharapkan atau tidak cocok harus diperbaiki sebelum publish; Test Mode sebelumnya mengizinkan write arbitrer. Ini audit deployment, bukan pemeriksaan role tambahan di aplikasi.
+
+| Verifikasi Phase 3.2A | Status |
+|---|---|
+| `firestore.rules` lokal | IMPLEMENTED LOCALLY |
+| Binding `firebase.json` | IMPLEMENTED LOCALLY |
+| Tes aplikasi/domain, lint, build, diff check | 267/267 Vitest PASS (14 file); lint/build PASS dengan warning baseline; diff check PASS |
+| Restricted Rules compile di Firebase Console | PASS |
+| Basic read-role Playground matrix | PASS |
+| Relawan emergency-create Playground simulation | FAIL / unresolved |
+| Restricted Rules deployed | NO — Test Mode masih aktif sementara |
+| Runtime authorization verification | NOT PERFORMED |
+| Final security hardening gate | REQUIRED |
+| Tes Rules emulator otomatis | NOT PERFORMED; Firebase CLI dan `@firebase/rules-unit-testing` tidak diinstal/diotorisasi |
+
+- Gate Phase 3.2A belum dinyatakan lengkap sampai Rules yang sama dipublikasikan dan diuji terhadap akun/flow nyata. Tes Vitest mock tidak membuktikan evaluasi Firestore Rules. Tidak ada full E2E suite. Migrasi Dexie v2 berisi data → v4 **NOT RUNTIME TESTED**; hidrasi `/relawan/history` lintas browser dan hardening idempotensi PFA tetap terbuka. Wording PFA/SRQ/Risk-Function provisional, klasifikasi belum tervalidasi klinis, algoritme adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED** (`finalTier === baseTier`), Whisper masih memiliki batas akurasi, dan transkrip tidak mengisi jawaban SRQ otomatis. T0 tetap terpisah dari SRQ T1/T2/T3; triase legacy tetap didukung; cadence reassessment belum ditentukan.
+
+## Phase 3.2B — Faskes Secondary Validation + Referral UI (COMPLETE / PASS untuk selected prototype scope)
+
+- Antrean `/faskes` mempertahankan listener real-time, urutan terbaru, isolasi origin malformed, dan warning `workflowIssue`. Kartu kini menampilkan status yang diturunkan dari `validation`/`referral` serta tautan ke `/faskes/emergencies/:id`; origin tetap `t0-suspect`.
+- Detail memakai listener satu dokumen dengan metadata cache/pending-write. Asal Red Flag, simulasi Tele-Emergency tanpa panggilan nyata, form keputusan final, dan panel referral ditampilkan sesuai state. Hanya satu langkah referral berikutnya tersedia. Setelah transaksi berhasil atau konflik Nakes, UI menunggu snapshot server sehat sebelum membuka tindakan lain. Offline, cache, listener error, metadata workflow rusak, dan write aktif menonaktifkan tindakan.
+- Riwayat Faskes membaca pasien dan kasus terkait NIK hanya dari Firestore server. Query pasien memakai `findCloudPatientByNik()` yang read-only; query kasus memakai `getDocsFromServer()`. Tidak ada penggunaan `lookupPatient()` atau rekonsiliasi Dexie. Riwayat tidak tersedia atau tidak ada tidak menahan validasi; emergency anonim tidak mengeluarkan query riwayat.
+- Tes Vitest mencakup proyeksi state, guard dan normalisasi payload, ringkasan riwayat, serta render statis. `npm test` **295/295 PASS (17 file)**; `npm run lint` **PASS** dengan 14 warning lama; `npm run build` **PASS** dengan warning lama dependency `eval`/ukuran bundle; `git diff --check` **PASS**. Gate browser A-L dengan emergency/pasien sintetis **PASS** di bawah Test Mode Rules, sehingga Phase 3.2B **COMPLETE / PASS untuk selected prototype scope**. Browser notification/audio ditunda ke **Phase 3.2C — Attention Enhancements**. Tidak ada dependency, koleksi backend, atau perubahan Rules.
+- Restricted Rules compile **PASS**; basic read-role Playground matrix **PASS**; Relawan emergency-create Playground simulation **FAIL / unresolved**; restricted Rules deployed **NO**; runtime authorization verification **NOT PERFORMED**; automated emulator Rules tests **NOT PERFORMED**; final security hardening gate **REQUIRED**. Test Mode masih aktif sementara untuk pengembangan demo. Tes UI dan browser di bawah Test Mode tidak membuktikan otorisasi backend.
+
+```text
+restricted Rules compile: PASS
+basic read-role Playground matrix: PASS
+Relawan emergency-create Playground simulation: FAIL / unresolved
+restricted Rules deployed: NO
+runtime authorization verification: NOT PERFORMED
+automated emulator Rules tests: NOT PERFORMED
+final security hardening gate: REQUIRED
+```
+
+- Caveat tetap: belum ada full E2E suite; Dexie populated v2 → v4 **NOT RUNTIME TESTED**; hidrasi Relawan History lintas browser dan hardening idempotensi PFA terbuka; wording PFA/SRQ/Risk-Function provisional dan klasifikasi belum tervalidasi klinis; Risk/Function adjustment **NOT DEFINED / NOT IMPLEMENTED** (`finalTier === baseTier`); akurasi Whisper lokal terbatas dan transkrip tidak otomatis mengisi SRQ; T0 terpisah dari SRQ T1/T2/T3; triase legacy didukung; cadence reassessment belum ada.
+
+### Gate browser Phase 3.2B — A-L PASS di bawah Test Mode Rules
+
+Gate ini memakai sesi browser Relawan dan dua sesi Nakes terpisah, emergency/pasien sintetis disposable, serta deployed Test Mode Rules sebagai pengecualian development/demo. Hasil ini bukan suite E2E penuh, bukan verifikasi restricted Rules, bukan verifikasi backend authorization, dan bukan bukti Test Mode aman.
+
+| Gate | Hasil | Bukti perilaku |
+|---|---|---|
+| A | PASS | Relawan membuat emergency T0. Antrean Nakes yang sudah terbuka bertambah tanpa refresh dan membuka detail route `/faskes/emergencies/:id` yang benar. |
+| B | PASS | Confirm T0 persisted sementara origin tetap `status: "t0-suspect"`; Firestore menunjukkan `validation.outcome: "t0-confirmed"` dan `referral.status: "waiting-dispatch"`. |
+| C | PASS | Dua sesi Nakes mengirim keputusan berbeda hampir bersamaan. Tepat satu transaksi committed; sesi kalah menampilkan konflik `already-decided` lalu converge ke keputusan listener-authoritative. |
+| D | PASS | Emergency baru downgrade T1 persisted; `referral` tidak ada dan tidak ada aksi validasi ulang. |
+| E | PASS | Emergency baru downgrade T2 persisted; `referral` tidak ada dan tidak ada aksi validasi ulang. |
+| F | PASS | Referral T0 confirmed maju berurutan `waiting-dispatch → en-route-to-location → arrived-at-posko → en-route-to-hospital → completed`; sesi Nakes kedua update tanpa refresh dan state `completed` terminal. |
+| G | PASS | Dua sesi Nakes mencoba transisi referral stale hampir bersamaan. Firestore maju sekali; sesi kalah menampilkan konflik stale-state dan converge tanpa repeat/skip transition. |
+| H | PASS | Dari snapshot server sehat, mode offline tetap menampilkan origin cache bila tersedia dan menonaktifkan workflow writes. UI tidak melanjutkan aksi klinis, Firestore tetap tanpa validation/referral selama offline, lalu action re-enabled setelah reconnect dan snapshot server segar. |
+| I | PASS | Direct refresh detail URL yang sudah decided merekonstruksi validation/referral dari Firestore tanpa route state antrean. |
+| J | PASS | Disposable emergency mempertahankan origin T0 valid sementara metadata workflow dibuat malformed. Queue/detail tetap menampilkan origin, warning muncul, dan workflow action nonaktif. |
+| K | PASS | Fixture pasien linked sintetis dengan PFA, SRQ-20, dan triase legacy persisted menampilkan compact stored summaries. Tidak ada score/tier baru yang diinfer atau ditulis; fixture hanya membuktikan display riwayat Faskes, bukan flow registrasi/upload Relawan. |
+| L | PASS | Emergency anonim tidak menampilkan riwayat pasien; source structurally skips history loader saat `patientNik` tidak ada. Validasi aktif setelah snapshot server sehat. |
+
+Gating yang diamati langsung: initial loading, cache/fromCache, workflowIssue, invalid origin, request in flight, dan transaction success sebelum listener confirmation. Listener error callback nyata **NOT DIRECTLY VERIFIED** di browser. `hasPendingWrites` gating **NOT DIRECTLY VERIFIED** di browser karena uji direct client no-op write ditolak oleh auto-review sesuai batas H yang melarang direct backend mutation di luar UI. Kedua kondisi ini tetap dicakup oleh production write guard dan automated tests, tetapi tidak dicatat sebagai browser-observed.
