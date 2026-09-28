@@ -21,7 +21,7 @@ export default function FaskesLayout() {
             <div className="rounded-xl bg-red-700 p-2 text-white"><Brain className="h-6 w-6" /></div>
             <div>
               <p className="font-bold text-slate-900">RAPID-MIND</p>
-              <p className="text-sm text-slate-600">Faskes · Penerimaan Darurat</p>
+              <p className="text-sm text-slate-600">Faskes · Validasi dan Rujukan</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -44,7 +44,7 @@ export default function FaskesLayout() {
         <nav aria-label="Navigasi Faskes" className="mb-6">
           <NavLink to="/faskes" end className={({ isActive }) =>
             `inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${isActive ? 'bg-red-700 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}>
-            <ClipboardList className="h-4 w-4" /> Antrean T0-Suspect
+            <ClipboardList className="h-4 w-4" /> Antrean Darurat
           </NavLink>
         </nav>
         <main><Outlet /></main>

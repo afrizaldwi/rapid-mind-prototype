@@ -32,6 +32,7 @@ import MapPage from './pages/admin/MapPage'
 import CasesPage from './pages/admin/CasesPage'
 import StatsPage from './pages/admin/StatsPage'
 import EmergencyQueuePage from './pages/faskes/EmergencyQueuePage'
+import EmergencyDetailPage from './pages/faskes/EmergencyDetailPage'
 
 function App() {
   return (
@@ -77,6 +78,7 @@ function App() {
           }
         >
           <Route index element={<EmergencyQueuePage />} />
+          <Route path="emergencies/:id" element={<EmergencyDetailPage />} />
         </Route>
 
         {/* Admin Routes */}

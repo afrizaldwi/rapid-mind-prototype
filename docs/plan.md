@@ -1,8 +1,8 @@
 # RAPID-MIND — Implementation Plan (Demo Prototype)
 
 > **Dokumen:** Rencana Eksekusi & Implementasi Prototipe RAPID-MIND  
-> **Tanggal Pembaruan:** 27 September 2026
-> **Status:** **Phase 2C dan Phase 3.1 tetap PASS untuk scope terpilih. Source Phase 3.2A (rules lokal, binding, schema, parser, dan transaksi) telah dibuat; deployment Firebase, verifikasi Rules manual, dan otorisasi browser masih PENDING. Phase 3.2B UI belum dimulai. Belum full E2E; migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
+> **Tanggal Pembaruan:** 28 September 2026
+> **Status:** **Phase 2C, Phase 3.1, dan Phase 3.2B PASS untuk scope prototipe terpilih. Source Phase 3.2A tersedia; restricted Rules belum deployed dan Relawan emergency-create Playground masih FAIL / unresolved. Phase 3.2B COMPLETE / PASS untuk selected prototype scope: source, 295/295 tes otomatis, dan browser smoke A-L PASS di bawah Test Mode Rules. Belum full E2E; migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
 > **Target:** Prototipe demo end-to-end tanpa *dead end*, mencakup alur Relawan, Faskes/PSC 119, dan Admin BPBD/Dinkes.
 
 ---
@@ -26,7 +26,8 @@
 | Risk Factor + Gangguan Fungsi | ✅/⚠️ | Screen 6→7 lulus smoke browser; aturan adjustment belum ada |
 | Hasil SRQ T1/T2/T3 | ✅/⚠️ | Screen 7 dan simpan typed case lulus smoke browser Phase 2C; T0 tetap Red Flag terpisah |
 | Role 2 Faskes Phase 3.1 | ✅ | Antrean read-only real-time dan smoke browser dua sesi PASS; write workflow Phase 3.2/rules masih terbuka |
-| Role 2 Faskes Phase 3.2A | ⚠️ | Source dan tes aplikasi tersedia; Rules belum deployed atau diverifikasi runtime; belum ada UI aksi Faskes |
+| Role 2 Faskes Phase 3.2A | ⚠️ | Source dan tes aplikasi tersedia; restricted Rules belum deployed dan otorisasi runtime belum diverifikasi |
+| Role 2 Faskes Phase 3.2B | ✅/⚠️ | COMPLETE / PASS untuk scope prototipe terpilih: source, 295/295 tes otomatis, dan browser smoke A-L PASS di bawah Test Mode Rules; bukan verifikasi otorisasi backend |
 | Admin real-time/longitudinal | ❌ | Belum ada |
 
 ### Milestone yang sudah selesai dari plan sebelumnya
@@ -54,7 +55,7 @@ Phase 0A menutup putusnya patient context dan bypass bottom nav. Source Phase 0B
 5. **SRQ-20 prototype modular.** 20 butir ber-ID stabil berada di `src/protocols/srq20Protocol.js`; teksnya `[Template]` dan dapat diganti tanpa mengubah validasi. Cut-off T3 0–5, T2 6–10, T1 11–20 berasal dari `docs/workflow.md` sebagai **prototype requirement**, bukan klaim validasi klinis dari source code.
 6. **Human-in-the-loop.** Pada protokol template Phase 2B, STT/Whisper hanya membantu transkrip sementara; Relawan mengisi semua jawaban Ya/Tidak secara manual. Auto-check memerlukan pemetaan klinis yang belum disepakati.
 7. **Role 2 dibuat simplified tetapi stateful.** Fokus pada queue T0-Suspect, simulasi Tele-Emergency, confirm/downgrade, dan tracking status.
-8. **Real-time menggunakan Firestore `onSnapshot`.** Tidak perlu Cloud Functions/FCM untuk demo awal; Browser Notification + audio chime cukup untuk simulasi command center.
+8. **Real-time menggunakan Firestore `onSnapshot`.** Tidak perlu Cloud Functions/FCM untuk demo awal. Browser Notification dan audio chime ditunda ke Phase 3.2C; alur inti Faskes tidak bergantung pada izin notifikasi/autoplay.
 9. **Jangan polish sebelum core loop selesai.** Heatmap kontinu, export, dan animasi berada setelah flow Relawan → Faskes → Admin terhubung.
 
 ---
@@ -315,14 +316,17 @@ Parser cloud mempertahankan origin T0 yang valid saat namespace workflow malform
 |---|---|
 | Source `firestore.rules` dan binding `firebase.json` | IMPLEMENTED LOCALLY; belum deployed |
 | Tes aplikasi/domain dan lint/build | 267/267 Vitest PASS (14 file); lint/build PASS dengan warning baseline |
-| Rules deployed di Firebase Console | PENDING — dilakukan pemilik proyek |
-| Rules Playground manual | PENDING |
-| Otorisasi browser setelah deployment | PENDING |
+| Restricted Rules compile di Firebase Console | PASS |
+| Basic read-role Playground matrix | PASS |
+| Relawan emergency-create Playground simulation | FAIL / unresolved |
+| Restricted Rules deployed | NO — Test Mode masih aktif sementara |
+| Runtime authorization verification | NOT PERFORMED |
+| Final security hardening gate | REQUIRED |
 | Tes Rules emulator otomatis | NOT PERFORMED; tooling belum diotorisasi |
 
-**Phase 3.2B:** setelah gate Rules lulus, tambahkan simulasi Tele-Emergency, workspace keputusan klinis, panel referral/transport, dan alert browser sesuai scope produk. Origin tetap `t0-suspect`; status workflow berada pada namespace terpisah.
+**Phase 3.2B — COMPLETE / PASS untuk selected prototype scope:** `/faskes/emergencies/:id` membaca satu emergency dengan listener metadata; UI menampilkan origin tetap `t0-suspect`, simulasi Tele-Emergency, validasi final T0/T1/T2, dan satu langkah referral berikutnya. Riwayat pasien/NIK dibaca hanya dari server dan tidak menahan keputusan. Tindakan dinonaktifkan saat offline, cache/pending write, listener error, workflow bermasalah, atau menunggu konfirmasi listener. Tes source `npm test` **295/295 PASS (17 file)**; `npm run lint` **PASS** dengan 14 warning lama; `npm run build` **PASS** dengan warning lama dependency `eval`/ukuran bundle; `git diff --check` **PASS**. Browser smoke gate A-L **PASS** di bawah Test Mode Rules: antrean live tanpa refresh, detail route benar, origin T0-Suspect immutable, validasi T0/T1/T2 persisted, referral dua sesi maju berurutan, konflik `already-decided` dan `stale-transition` muncul lalu converge ke listener, offline/cache menonaktifkan workflow writes, refresh detail pulih dari Firestore, workflow malformed mempertahankan origin dengan warning, riwayat Faskes server-only tampil untuk fixture linked, dan emergency anonim tidak memuat riwayat. Listener error callback nyata dan `hasPendingWrites` gating **NOT DIRECTLY VERIFIED** di browser; keduanya tetap tidak diklaim sebagai browser-observed dan tetap dicakup oleh production write guard serta automated tests. Browser notification/audio ditunda ke **Phase 3.2C — Attention Enhancements**. Test Mode browser PASS tidak membuktikan restricted Rules atau backend authorization.
 
-**Gate Phase 3.2:** dua browser dapat memperagakan penerimaan T0-Suspect hingga keputusan validasi/referral tanpa mengubah data origin.
+**Gate Phase 3.2B:** dua browser memperagakan penerimaan T0-Suspect hingga keputusan validasi/referral tanpa mengubah data origin untuk scope prototipe terpilih. Restricted Rules deployment dan runtime authorization tetap gate keamanan terpisah.
 
 ---
 
@@ -516,4 +520,4 @@ Setiap prompt Codex harus menyertakan:
 - test/build/lint requirement;
 - instruksi memperbarui `docs/changes-notes.md` setelah task berhasil.
 
-**Status terkini:** Phase 2C dan smoke browser A–J tetap **PASS**; Phase 3.1 tetap **PASS** untuk scope sebelumnya (222/222 tes saat gate 3.1). Source Phase 3.2A kini menyediakan kontrak Rules lokal dan layanan transaksi; deployed Rules, Rules Playground, serta otorisasi browser masih **PENDING**. Phase 3.2B UI dan Admin real-time/longitudinal belum dimulai. Pada Phase 2B, smoke scenario C **PASS WITH LIMITATION** karena akurasi Whisper lokal; Phase 2C **PASS** untuk scope prototipe terpilih. Transkrip tidak memetakan jawaban SRQ otomatis. Adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED** dan v1 tetap `finalTier === baseTier`; klasifikasi SRQ/Risk-Function maupun wording protokol/klinis belum divalidasi klinis. T0 tetap emergency terpisah dari klasifikasi SRQ dan triase legacy tetap didukung. Belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.
+**Status terkini:** Phase 2C dan smoke browser A–J tetap **PASS**; Phase 3.1 tetap **PASS** untuk scope sebelumnya (222/222 tes saat gate 3.1). Source Phase 3.2A menyediakan Rules lokal dan layanan transaksi, tetapi emergency-create Playground **FAIL / unresolved**, restricted Rules **belum deployed**, dan otorisasi runtime **NOT PERFORMED**. Phase 3.2B **COMPLETE / PASS untuk selected prototype scope**: source implementation complete, `npm test` **295/295 PASS** (17 file), lint/build/diff-check PASS dengan warning lama, dan browser smoke A-L PASS di bawah Test Mode Rules. Hasil ini memverifikasi immutable T0-Suspect origin, workflow secondary validation/referral dua sesi Nakes, dan boundary riwayat Faskes server-only untuk scope terpilih; bukan full E2E, bukan verifikasi restricted Rules, dan bukan bukti Test Mode aman. Listener error callback nyata serta `hasPendingWrites` gating **NOT DIRECTLY VERIFIED** di browser. Admin real-time/longitudinal tetap Phase 4. Pada Phase 2B, smoke scenario C **PASS WITH LIMITATION** karena akurasi Whisper lokal; transkrip tidak memetakan jawaban SRQ otomatis. Adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED** dan v1 tetap `finalTier === baseTier`; klasifikasi SRQ/Risk-Function maupun wording protokol/klinis belum divalidasi klinis. T0 tetap emergency terpisah dari klasifikasi SRQ dan triase legacy tetap didukung. Belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.

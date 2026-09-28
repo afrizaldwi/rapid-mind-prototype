@@ -336,9 +336,53 @@ Phase 0 ditutup untuk prototipe saat ini. Milestone pengembangan berikutnya adal
 | `firestore.rules` lokal | IMPLEMENTED LOCALLY |
 | Binding `firebase.json` | IMPLEMENTED LOCALLY |
 | Tes aplikasi/domain, lint, build, diff check | 267/267 Vitest PASS (14 file); lint/build PASS dengan warning baseline; diff check PASS |
-| Rules deployed di Firebase Console | PENDING — tidak dilakukan pada task source |
-| Rules Playground manual | PENDING |
-| Otorisasi browser setelah deployment | PENDING |
+| Restricted Rules compile di Firebase Console | PASS |
+| Basic read-role Playground matrix | PASS |
+| Relawan emergency-create Playground simulation | FAIL / unresolved |
+| Restricted Rules deployed | NO — Test Mode masih aktif sementara |
+| Runtime authorization verification | NOT PERFORMED |
+| Final security hardening gate | REQUIRED |
 | Tes Rules emulator otomatis | NOT PERFORMED; Firebase CLI dan `@firebase/rules-unit-testing` tidak diinstal/diotorisasi |
 
 - Gate Phase 3.2A belum dinyatakan lengkap sampai Rules yang sama dipublikasikan dan diuji terhadap akun/flow nyata. Tes Vitest mock tidak membuktikan evaluasi Firestore Rules. Tidak ada full E2E suite. Migrasi Dexie v2 berisi data → v4 **NOT RUNTIME TESTED**; hidrasi `/relawan/history` lintas browser dan hardening idempotensi PFA tetap terbuka. Wording PFA/SRQ/Risk-Function provisional, klasifikasi belum tervalidasi klinis, algoritme adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED** (`finalTier === baseTier`), Whisper masih memiliki batas akurasi, dan transkrip tidak mengisi jawaban SRQ otomatis. T0 tetap terpisah dari SRQ T1/T2/T3; triase legacy tetap didukung; cadence reassessment belum ditentukan.
+
+## Phase 3.2B — Faskes Secondary Validation + Referral UI (COMPLETE / PASS untuk selected prototype scope)
+
+- Antrean `/faskes` mempertahankan listener real-time, urutan terbaru, isolasi origin malformed, dan warning `workflowIssue`. Kartu kini menampilkan status yang diturunkan dari `validation`/`referral` serta tautan ke `/faskes/emergencies/:id`; origin tetap `t0-suspect`.
+- Detail memakai listener satu dokumen dengan metadata cache/pending-write. Asal Red Flag, simulasi Tele-Emergency tanpa panggilan nyata, form keputusan final, dan panel referral ditampilkan sesuai state. Hanya satu langkah referral berikutnya tersedia. Setelah transaksi berhasil atau konflik Nakes, UI menunggu snapshot server sehat sebelum membuka tindakan lain. Offline, cache, listener error, metadata workflow rusak, dan write aktif menonaktifkan tindakan.
+- Riwayat Faskes membaca pasien dan kasus terkait NIK hanya dari Firestore server. Query pasien memakai `findCloudPatientByNik()` yang read-only; query kasus memakai `getDocsFromServer()`. Tidak ada penggunaan `lookupPatient()` atau rekonsiliasi Dexie. Riwayat tidak tersedia atau tidak ada tidak menahan validasi; emergency anonim tidak mengeluarkan query riwayat.
+- Tes Vitest mencakup proyeksi state, guard dan normalisasi payload, ringkasan riwayat, serta render statis. `npm test` **295/295 PASS (17 file)**; `npm run lint` **PASS** dengan 14 warning lama; `npm run build` **PASS** dengan warning lama dependency `eval`/ukuran bundle; `git diff --check` **PASS**. Gate browser A-L dengan emergency/pasien sintetis **PASS** di bawah Test Mode Rules, sehingga Phase 3.2B **COMPLETE / PASS untuk selected prototype scope**. Browser notification/audio ditunda ke **Phase 3.2C — Attention Enhancements**. Tidak ada dependency, koleksi backend, atau perubahan Rules.
+- Restricted Rules compile **PASS**; basic read-role Playground matrix **PASS**; Relawan emergency-create Playground simulation **FAIL / unresolved**; restricted Rules deployed **NO**; runtime authorization verification **NOT PERFORMED**; automated emulator Rules tests **NOT PERFORMED**; final security hardening gate **REQUIRED**. Test Mode masih aktif sementara untuk pengembangan demo. Tes UI dan browser di bawah Test Mode tidak membuktikan otorisasi backend.
+
+```text
+restricted Rules compile: PASS
+basic read-role Playground matrix: PASS
+Relawan emergency-create Playground simulation: FAIL / unresolved
+restricted Rules deployed: NO
+runtime authorization verification: NOT PERFORMED
+automated emulator Rules tests: NOT PERFORMED
+final security hardening gate: REQUIRED
+```
+
+- Caveat tetap: belum ada full E2E suite; Dexie populated v2 → v4 **NOT RUNTIME TESTED**; hidrasi Relawan History lintas browser dan hardening idempotensi PFA terbuka; wording PFA/SRQ/Risk-Function provisional dan klasifikasi belum tervalidasi klinis; Risk/Function adjustment **NOT DEFINED / NOT IMPLEMENTED** (`finalTier === baseTier`); akurasi Whisper lokal terbatas dan transkrip tidak otomatis mengisi SRQ; T0 terpisah dari SRQ T1/T2/T3; triase legacy didukung; cadence reassessment belum ada.
+
+### Gate browser Phase 3.2B — A-L PASS di bawah Test Mode Rules
+
+Gate ini memakai sesi browser Relawan dan dua sesi Nakes terpisah, emergency/pasien sintetis disposable, serta deployed Test Mode Rules sebagai pengecualian development/demo. Hasil ini bukan suite E2E penuh, bukan verifikasi restricted Rules, bukan verifikasi backend authorization, dan bukan bukti Test Mode aman.
+
+| Gate | Hasil | Bukti perilaku |
+|---|---|---|
+| A | PASS | Relawan membuat emergency T0. Antrean Nakes yang sudah terbuka bertambah tanpa refresh dan membuka detail route `/faskes/emergencies/:id` yang benar. |
+| B | PASS | Confirm T0 persisted sementara origin tetap `status: "t0-suspect"`; Firestore menunjukkan `validation.outcome: "t0-confirmed"` dan `referral.status: "waiting-dispatch"`. |
+| C | PASS | Dua sesi Nakes mengirim keputusan berbeda hampir bersamaan. Tepat satu transaksi committed; sesi kalah menampilkan konflik `already-decided` lalu converge ke keputusan listener-authoritative. |
+| D | PASS | Emergency baru downgrade T1 persisted; `referral` tidak ada dan tidak ada aksi validasi ulang. |
+| E | PASS | Emergency baru downgrade T2 persisted; `referral` tidak ada dan tidak ada aksi validasi ulang. |
+| F | PASS | Referral T0 confirmed maju berurutan `waiting-dispatch → en-route-to-location → arrived-at-posko → en-route-to-hospital → completed`; sesi Nakes kedua update tanpa refresh dan state `completed` terminal. |
+| G | PASS | Dua sesi Nakes mencoba transisi referral stale hampir bersamaan. Firestore maju sekali; sesi kalah menampilkan konflik stale-state dan converge tanpa repeat/skip transition. |
+| H | PASS | Dari snapshot server sehat, mode offline tetap menampilkan origin cache bila tersedia dan menonaktifkan workflow writes. UI tidak melanjutkan aksi klinis, Firestore tetap tanpa validation/referral selama offline, lalu action re-enabled setelah reconnect dan snapshot server segar. |
+| I | PASS | Direct refresh detail URL yang sudah decided merekonstruksi validation/referral dari Firestore tanpa route state antrean. |
+| J | PASS | Disposable emergency mempertahankan origin T0 valid sementara metadata workflow dibuat malformed. Queue/detail tetap menampilkan origin, warning muncul, dan workflow action nonaktif. |
+| K | PASS | Fixture pasien linked sintetis dengan PFA, SRQ-20, dan triase legacy persisted menampilkan compact stored summaries. Tidak ada score/tier baru yang diinfer atau ditulis; fixture hanya membuktikan display riwayat Faskes, bukan flow registrasi/upload Relawan. |
+| L | PASS | Emergency anonim tidak menampilkan riwayat pasien; source structurally skips history loader saat `patientNik` tidak ada. Validasi aktif setelah snapshot server sehat. |
+
+Gating yang diamati langsung: initial loading, cache/fromCache, workflowIssue, invalid origin, request in flight, dan transaction success sebelum listener confirmation. Listener error callback nyata **NOT DIRECTLY VERIFIED** di browser. `hasPendingWrites` gating **NOT DIRECTLY VERIFIED** di browser karena uji direct client no-op write ditolak oleh auto-review sesuai batas H yang melarang direct backend mutation di luar UI. Kedua kondisi ini tetap dicakup oleh production write guard dan automated tests, tetapi tidak dicatat sebagai browser-observed.

@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { AlertTriangle, MapPin, RefreshCw } from 'lucide-react';
 import { db } from '../../lib/firebase';
 import { collectEmergencyQueue } from '../../lib/emergencyCloud';
 import { RED_FLAG_PROTOCOL } from '../../protocols/redFlagProtocol';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { getWorkflowPresentation } from '../../lib/faskesWorkflowUi.js';
 
 const gateLabels = new Map(RED_FLAG_PROTOCOL.indicators.map(({ id, label }) => [id, label]));
 const timeFormat = new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
 
 function EmergencyCard({ emergency }) {
   const { id, origin, workflowIssue } = emergency;
+  const workflow = getWorkflowPresentation(emergency);
   const hasLocation = origin.lat !== undefined && origin.lng !== undefined;
   return (
     <article className="rounded-xl border border-red-200 bg-white p-4 shadow-sm sm:p-5">
@@ -30,6 +33,7 @@ function EmergencyCard({ emergency }) {
         <p><span className="font-semibold">Posko:</span> {origin.poskoName || 'Belum dicatat'}</p>
         <p><span className="font-semibold">Relawan:</span> {origin.relawanName || origin.relawanId}</p>
       </div>
+      <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-900"><span className="font-semibold">{workflow.title}</span><span className="block text-slate-600">{workflow.detail}</span></p>
       <div className="mt-4">
         <p className="text-sm font-semibold text-slate-900">Indikator Red Flag</p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
@@ -44,6 +48,7 @@ function EmergencyCard({ emergency }) {
         {hasLocation ? `Koordinat posko: ${origin.lat}, ${origin.lng}` : 'Koordinat tidak tersedia'}
       </p>
       <p className="mt-2 text-xs text-slate-400">ID emergency: {id}</p>
+      <Link to={`/faskes/emergencies/${encodeURIComponent(id)}`} className="mt-4 inline-flex rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800">Buka detail</Link>
     </article>
   );
 }
@@ -87,11 +92,11 @@ export default function EmergencyQueuePage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Antrean Darurat</h1>
-          <p className="mt-1 text-sm text-slate-600">Penerimaan T0-Suspect secara real-time. Antrean ini hanya untuk dibaca.</p>
+          <p className="mt-1 text-sm text-slate-600">Penerimaan T0-Suspect dan status alur Faskes secara real-time.</p>
         </div>
         <div className="rounded-xl bg-red-700 px-4 py-2 text-center text-white">
           <span className="block text-2xl font-bold">{queue.items.length}</span>
-          <span className="text-xs">T0-Suspect terlihat</span>
+          <span className="text-xs">Emergency terlihat</span>
         </div>
       </div>
 
@@ -128,7 +133,7 @@ export default function EmergencyQueuePage() {
 
       {queue.loading && <p className="rounded-xl bg-white p-8 text-center text-slate-600">Memuat antrean emergency...</p>}
       {!queue.loading && queue.items.length === 0 && (
-        <p className="rounded-xl bg-white p-8 text-center text-slate-600">Belum ada T0-Suspect yang dapat ditampilkan.</p>
+        <p className="rounded-xl bg-white p-8 text-center text-slate-600">Belum ada emergency yang dapat ditampilkan.</p>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
         {queue.items.map((emergency) => <EmergencyCard key={emergency.id} emergency={emergency} />)}
