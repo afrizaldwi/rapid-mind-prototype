@@ -1,5 +1,5 @@
-\[SCREEN 1: UNIVERSAL SSO LOGIN\]  
-  │ (Autentikasi Single Sign-On berbasis Role: Relawan / Dinkes / BPBD)  
+\[SCREEN 1: UNIVERSAL LOGIN\]  
+  │ (Firebase Authentication + RBAC: Relawan / Nakes / Admin BPBD-Dinkes)  
   ▼  
 \[SCREEN 2: HOMESCREEN & IDENTITAS PENYINTAS\]  
   │── Input NIK / Scan QR Gelang Posko / Pencarian Nama  
@@ -38,16 +38,18 @@
   ├─► Ditekan Manual ATAU Terdeteksi Suisida, Psikosis Akut, Agitasi, Medis Akut  
   │  
   ▼  
-\[SCREEN 4: ALERT & NOTIFIKASI RUJUKAN DARURAT (T0 \- EMERGENCY)\]  
+\[SCREEN 4: ALERT & NOTIFIKASI RED FLAG (T0-SUSPECT)\]  
   │  
   ▼  
-\[NOTIFIKASI INSTAN TERKIRIM KE: Public Safety Center (PSC 119\) / Dinkes / RS Rujukan\]
+\[EARLY ALERT REAL-TIME TERKIRIM KE: Public Safety Center (PSC 119\) / Dinkes / Faskes Command Center\]  
+  │  
+  └──► Penetapan fasilitas tujuan dan eksekusi rujukan dilakukan setelah validasi sekunder Nakes.
 
 ### **INTEGRASI AKHIR DATA & DASHBOARD ADMIN** 
 
 Seluruh hasil akhir dari Layar Relawan akan bermuara pada 2 jenis dashboard:
 
-1. **Kasus Red Flag (T0 Emergency):** Mengirimkan **Notifikasi Peringatan Dini & Rincian Klinis** ke Dashboard Rumah Sakit / PSC 119 / Tenaga Medis Profesional untuk tindakan rujukan cepat darurat.  
+1. **Kasus Red Flag (T0 Emergency):** Mengirimkan **Notifikasi Peringatan Dini & Rincian Klinis** secara *real-time* ke Dashboard Role 2 (PSC 119 / Dinkes / Faskes Command Center) sebagai **T0-Suspect** untuk validasi sekunder. Penetapan fasilitas tujuan dan eksekusi rujukan dilakukan setelah status dikonfirmasi menjadi **T0-Confirmed**.  
 2. **Kasus T1, T2, dan T3:** Terintegrasi secara otomatis ke **Dashboard Utama BPBD & Dinkes** dalam bentuk **Peta Geospasial Interaktif (*Geomap/Heatmap*)** dan statistik pemantauan perkembangan kesehatan mental penyintas hingga 30 hari.
 
 ### **Deskripsi Alur Operasional Sistem RAPID-MIND**
@@ -56,7 +58,7 @@ Sistem RAPID-MIND dirancang dengan alur kerja yang terintegrasi, adaptif, dan re
 
 #### **1\. Autentikasi Pengguna & Identifikasi Penyintas (Screen 1 & 2\)**
 
-Pengoperasian diawali melalui **Universal SSO Login Portal (Screen 1\)** yang menerapkan sistem *Role-Based Access Control* (RBAC) untuk membedakan hak akses antara Relawan Lapangan dan Pengambil Kebijakan (BPBD/Dinkes).
+Pengoperasian diawali melalui **Universal Login Portal (Screen 1\)** menggunakan **Firebase Authentication** dan *Role-Based Access Control* (RBAC) untuk membedakan hak akses antara Relawan Lapangan (`relawan`), Tenaga Kesehatan/Faskes (`nakes`), dan Admin/Pengambil Kebijakan BPBD-Dinkes (`admin`).
 
 Setelah masuk ke **Homescreen Relawan (Screen 2\)**, relawan melakukan identifikasi penyintas menggunakan NIK, pemindaian QR Code gelang posko, atau pencarian nama. Sistem secara otomatis menjalankan *Auto-Lookup System*:
 
@@ -70,7 +72,7 @@ Pada 72 jam pertama pascabencana, penyintas diarahkan ke **Menu PFA (Screen 3\)*
 Selama proses ini berlangsung, sistem dilengkapi **Persistent Floating Shortcut: Red Flag Emergency** yang selalu aktif melayang di layar (Screen 2–7). Jika relawan menemukan atau mengidentifikasi adanya indikator kegawatdaruratan psikiatri/medis (ideasi bunuh diri, psikosis akut, agitasi berat, atau cedera fisik akut):
 
 * Relawan dapat menekan tombol darurat tersebut kapan saja, yang seketika memicu **Alert & Notifikasi Rujukan Darurat T0 (Screen 4\)**.  
-* Informasi klinis penyintas langsung terkirim secara *real-time* ke **Public Safety Center (PSC 119), Dinas Kesehatan, dan Rumah Sakit Rujukan** untuk penanganan medis darurat.
+* Informasi Red Flag dan konteks penyintas langsung terkirim secara *real-time* ke **Dashboard Role 2 (PSC 119 / Dinas Kesehatan / Faskes Command Center)** sebagai early alert **T0-Suspect** untuk validasi sekunder. Penetapan fasilitas tujuan dan eksekusi rujukan dilakukan setelah Nakes mengonfirmasi status **T0-Confirmed**.
 
 #### **3\. Penapisan Terstruktur Fase Lanjutan: Hari 4–30 (Screen 5, 6, & 7\)**
 
@@ -90,8 +92,6 @@ Seluruh data hasil asesmen (baik PFA maupun SRQ-20) tersimpan secara aman dalam 
 
 Data ini terintegrasi langsung ke **Dashboard Admin (BPBD & Dinkes)** dalam bentuk visualisasi **Peta Geospasial Interaktif (*Geomap/Heatmap*)** dan statistik wilayah *real-time*. Hal ini memudahkan pengambil kebijakan untuk memetakan sebaran zona risiko, memantau tren distres masyarakat, serta mendistribusikan tenaga kesehatan jiwa secara presisi dan efisien di area bencana.
 
-Siap, maaf ya\! Ini versi **teks polos murni** tanpa kotak kode atau karakter aneh yang bikin rusak saat di-copy. Kamu bisa langsung *copy-paste* bagian ini dengan aman:
-
 **PEMBAGIAN 3 ROLE (RBAC) RAPID-MIND**
 
 **ROLE 1: RELAWAN (Aplikasi Mobile PWA)**
@@ -103,9 +103,10 @@ Siap, maaf ya\! Ini versi **teks polos murni** tanpa kotak kode atau karakter an
 
 **ROLE 2: TENAGA KESEHATAN & TRC (Dashboard Faskes / PSC 119\)**
 
+* Terminologi: **Nakes** adalah akun pengguna tenaga kesehatan, sedangkan **Faskes/RS/Puskesmas/PSC 119/TRC Kesehatan** adalah organisasi atau unit layanan kesehatan yang dapat menaungi satu atau lebih akun Nakes.  
 * Hak Akses: Layar Tele-Emergency, Konfirmasi Status Rujukan, dan Rekam Medis Klinis Pasien.  
 * Tingkat Keputusan: Validasi Diagnostik atau Triage Sekunder.  
-* Akses & Aksi: Menerima notifikasi T0-Suspect, melakukan verifikasi cepat via telepon/video ke HP relawan atau menurunkan Tim Mobile, lalu mengubah status menjadi "T0-Confirmed Rujukan" atau menurunkan status ke T1/T2.
+* Akses & Aksi: Menerima notifikasi T0-Suspect, melakukan verifikasi cepat via telepon/video ke HP relawan atau menurunkan Tim Mobile, lalu mengubah status menjadi **"T0-Confirmed"** atau menurunkan status ke T1/T2. Setelah T0 terkonfirmasi, sistem menampilkan fasilitas kesehatan aktif/relevan yang tersedia, termasuk rekomendasi berdasarkan kedekatan lokasi bila koordinat valid tersedia; Nakes memilih fasilitas tujuan akhir sebelum workflow referral/dispatch dijalankan.
 
 
 
@@ -126,7 +127,7 @@ Siap, maaf ya\! Ini versi **teks polos murni** tanpa kotak kode atau karakter an
      
 4. Dokter atau Tenaga Kesehatan di Command Center melakukan validasi sekunder (Tele-Emergency) dengan menghubungi relawan di lapangan untuk konfirmasi visual selama 1-2 menit.  
      
-5. Jika terkonfirmasi valid, status diubah menjadi "T0-Confirmed" dan unit evakuasi/ambulans baru diberangkatkan. Jika ternyata hanya respons histeria biasa tanpa bahaya darurat, status diturunkan oleh Nakes menjadi T1 atau T2.  
+5. Jika terkonfirmasi valid, status diubah menjadi **"T0-Confirmed"**. Sistem kemudian menampilkan fasilitas kesehatan aktif/relevan yang tersedia, termasuk rekomendasi berdasarkan kedekatan lokasi bila koordinat valid tersedia. **Nakes menentukan fasilitas tujuan akhir**, kemudian workflow referral/dispatch dijalankan. Jika ternyata tidak memenuhi kriteria T0, status dapat diturunkan oleh Nakes menjadi T1 atau T2.  
      
 6. Seluruh pergerakan data ini terekam secara real-time di Dashboard Role 3 (BPBD dan Dinkes) untuk pemetaan peta geospasial (heatmap) dan pengambil kebijakan skala wilayah.
 
@@ -138,21 +139,19 @@ Halo Dev Team\! Biar kita satu frekuensi untuk pengerjaan prototipe/mockup web-a
 
   OFFLINE-FIRST CAPABILITY & DATA SYNC
 
-* Local Storage Engine: Menggunakan Service Workers dan IndexedDB untuk menangani pencatatan data saat berada di area blank spot (tanpa koneksi internet).  
-* Background Auto-Sync: Begitu perangkat relawan mendapatkan sinyal internet, Service Worker secara otomatis melakukan background sync untuk mengirimkan seluruh data antrean di IndexedDB ke server backend tanpa perlu refresh manual.  
-* Data Collision Handling: Menggunakan timestamp dan Unique Patient ID berbasis NIK agar tidak terjadi duplikasi data saat sinkronisasi beruntun dari beberapa relawan.
+* Local Storage Engine: Menggunakan **IndexedDB melalui Dexie** untuk menangani pencatatan data penting saat berada di area blank spot (tanpa koneksi internet). Service Worker tetap digunakan sebagai bagian dari kemampuan PWA/offline asset aplikasi.  
+* Offline-First Sync: Data pending dipertahankan di IndexedDB/Dexie dan disinkronkan ke Firebase melalui mekanisme sinkronisasi aplikasi saat koneksi kembali tersedia/startup-reconnect, tanpa perlu menginput ulang data.  
+* Data Collision Handling: Menggunakan NIK sebagai identitas pasien lintas penyimpanan, validasi kepemilikan record, identifier dokumen Firestore yang stabil untuk retry, serta mekanisme sinkronisasi pasien-sebelum-kasus agar retry tidak menghasilkan duplikasi cloud.
 
   AUTHENTICATION & ROLE-BASED ACCESS CONTROL (RBAC)
 
-* Catatan implementasi prototipe Phase 3.2A: butir SSO/JWT dan WebSockets di bawah adalah target spesifikasi, bukan mekanisme yang sudah berjalan. Aplikasi kini memakai Firebase Auth, role dari `users/{uid}` pada Firestore, redirect client per role, dan `onSnapshot` untuk antrean Faskes. `firestore.rules` lokal belum deployed atau diuji runtime.
-
-* Auth Protocol: Universal Single Sign-On (SSO) berbasis JWT (JSON Web Token).  
-* System Routing: Setelah autentikasi berhasil, backend akan membaca role dari token JWT dan melakukan auto-redirect ke 3 antarmuka terpisah:  
+* Auth Protocol: Menggunakan **Firebase Authentication** dengan *Role-Based Access Control* (RBAC). Firebase menangani token autentikasi dan sesi pengguna; aplikasi menggunakan profil/role pengguna untuk menentukan hak akses.  
+* System Routing: Setelah autentikasi berhasil, aplikasi membaca role pengguna dan melakukan auto-redirect ke 3 antarmuka terpisah:  
   a. ROLE\_RELAWAN (Mobile PWA)  
   * Auto-redirect ke PWA Mobile UI.  
   * Akses fitur: Input PFA (Hari 1-3), Wawancara SRQ-20 (Hari 4-30), Auto-Lookup NIK, Speech-to-Text, dan Persistent Floating Red-Flag Shortcut.
 
-  b. ROLE\_HEALTHCARE / FASKES (Dashboard Command Center & Tele-Emergency)
+  b. ROLE\_NAKES / HEALTHCARE / FASKES (Dashboard Command Center & Tele-Emergency)
 
   * Auto-redirect ke Web Dashboard Faskes / PSC 119 / TRC Kesehatan.  
   * Akses fitur: Real-time Alert Notification (T0-Suspect), Tele-Emergency Verification, Validasi Diagnostik Sekunder, Rekam Medis Klinis Pasien, dan Konfirmasi Rujukan (T0-Confirmed / Downgrade T1/T2).
@@ -160,7 +159,7 @@ Halo Dev Team\! Biar kita satu frekuensi untuk pengerjaan prototipe/mockup web-a
   c. ROLE\_ADMIN (Dashboard BPBD & Dinkes)
 
   * Auto-redirect ke Web Dashboard Monitoring & Analytics (Desktop UI).  
-  * Akses fitur: Interactive Geospatial Heatmap, Real-time WebSockets Live Data Update, Agregat Statistik Wilayah, Pemantauan Longitudinal 30 Hari, dan Manajemen Logistik/Relawan.
+  * Akses fitur: Interactive Geospatial Heatmap, **real-time data update menggunakan Firestore listener (`onSnapshot`)**, Agregat Statistik Wilayah, Pemantauan Longitudinal 30 Hari, dan Manajemen Logistik/Relawan.
 
 #### **2\. Screen Flow & Logic (Mobile PWA Relawan)**
 
@@ -177,7 +176,7 @@ Halo Dev Team\! Biar kita satu frekuensi untuk pengerjaan prototipe/mockup web-a
     * **LISTEN:** Panduan dialog penenangan & pendengaran aktif.  
     * **LINK:** Checklist kebutuhan dasar (makanan, shelter, keluarga).  
 * **Screen 4: Red-Flag Emergency Alert (Modal/Screen)**  
-  * *Triggered* saat kasus Red Flag terjadi. Mengirimkan *payload* darurat ke server untuk notifikasi instan PSC 119/RS.  
+  * *Triggered* saat kasus Red Flag terjadi. Mengirimkan *payload* **T0-Suspect** ke Firestore untuk early alert real-time pada Dashboard Role 2 (PSC 119 / Dinkes / Faskes Command Center). Penetapan fasilitas tujuan dan referral dilakukan setelah validasi sekunder Nakes.  
 * **Screen 5: Menu Wawancara SRQ-20 (Fase Lanjutan: Hari 4–30)**  
   * **Dual-Path Toggle:** Switcher antara \[Verbal\] dan \[Non-Verbal / Mutisme\].  
   * **Guided Instruction Tooltip:** Petunjuk bagi relawan di setiap nomor soal agar penyintas tidak salah tafsir.  
@@ -208,14 +207,14 @@ Layout Main Components:
 
 * Top Bar: Header nama Faskes/Unit PSC 119, Indikator Status Koneksi Real-time, dan Counter Alert (Jumlah T0 Pending).  
 * Panel Kiri (Emergency Queue & Notification List):  
-  * Daftar kartu panggilan darurat (T0-Suspect) yang masuk secara real-time via WebSockets.  
+  * Daftar kartu panggilan darurat (T0-Suspect) yang masuk secara real-time melalui **Firestore listener (`onSnapshot`)**.  
   * Kartu T0 berkedip merah (pulsing alert) dengan info: Nama Posko, Waktu Input, NIK Penyintas, dan Gejala Red Flag yang Dicentang Relawan.  
   * Tombol aksi cepat di setiap kartu: "Buka Tele-Emergency" dan "Lihat Detail Klinis".  
 * Panel Tengah (Patient Clinical Detail & Validation Workspace):  
   * Rekam Medis Singkat Penyintas: Riwayat PFA, catatan relawan, dan indikator Red Flag.  
   * Fitur Tele-Emergency Modal: Jendela panggilan suara/video atau obrolan cepat terintegrasi ke HP relawan untuk verifikasi visual kondisi penyintas.  
   * Action Button Area (Tombol Eksekusi Validasi):  
-    * Tombol Hijau: "Konfirmasi Rujukan (T0-Confirmed)" \-\> Otomatis mengirim perintah penjemputan ke unit ambulans/PSC 119\.  
+    * Tombol Hijau: "Konfirmasi T0 (T0-Confirmed)" \-\> Setelah konfirmasi, sistem menampilkan fasilitas kesehatan aktif/relevan yang tersedia, termasuk rekomendasi berdasarkan kedekatan lokasi bila koordinat valid tersedia. Nakes memilih fasilitas tujuan akhir sebelum referral/dispatch dijalankan.  
     * Tombol Kuning: "Downgrade Status (Ke T1 High Risk atau T2 Moderate)" \-\> Jika hasil verifikasi menunjukkan penyintas tidak dalam bahaya nyawa/psikosis darurat.  
 * Panel Kanan (Active Referral & Transport Tracking):  
   * Status pengiriman ambulans/tim mobile ke posko (Menuju Lokasi \-\> Tiba di Posko \-\> Dalam Perjalanan ke RS \-\> Selesai).
@@ -248,9 +247,9 @@ Layout Main Components:
 
 *Gimana Devs, draf alur & logika sistemnya sudah cukup jelas? Kalau ada struktur database atau endpoint API yang mau didiskusikan, kabari ya\!*
 
-I. System Architecture & PWA Offline-First: Penerapan Service Worker dan IndexedDB untuk menjamin fungsionalitas aplikasi di area blank spot serta Background Auto-Sync.   
+I. System Architecture & PWA Offline-First: Penerapan PWA dengan Service Worker untuk asset/offline shell serta **IndexedDB/Dexie** untuk penyimpanan data offline-first. Data pending disinkronkan melalui mekanisme sinkronisasi aplikasi saat koneksi kembali tersedia/startup-reconnect.   
     
-II. Universal Single Sign-On (SSO) & Role-Based Access Control (RBAC): Struktur otentikasi JWT yang memisahkan hak akses antarmuka Relawan (Mobile PWA) dan Pengambil Kebijakan (Desktop Dashboard).   
+II. Universal Login & Role-Based Access Control (RBAC): Menggunakan **Firebase Authentication** dan profil role aplikasi untuk memisahkan hak akses antarmuka Relawan (`relawan`), Tenaga Kesehatan/Faskes (`nakes`), dan Admin BPBD/Dinkes (`admin`).   
 
 III. Dual-Path Triage Algorithmic Framework:  
 Phase 1 (Acute Phase Hari 1–3): PFA First, Penapisan Red-Flag Safety Gate (T0 \- Emergency), dan Checklist Non-Verbal (Jalur B).   
@@ -260,3 +259,209 @@ Phase 2 (Longitudinal Evaluation Hari 30): Wawancara SRQ-20 Terpandu (Jalur A) u
 IV. Feature Innovations: Integrasi Speech-to-Text (Voice Input) untuk deteksi kata kunci berisiko dan Outdoor-Adaptable High-Contrast UI (Sunlight/Night Mode).  
      
 V. Data Integration & Geospasial Dashboard: Pembuatan Unique Patient ID untuk pemantauan longitudinal dan visualisasi Heatmap interaktif bagi BPBD/Dinkes.   
+
+PANDUAN PROTOKOL EMERGENCY (RED FLAG T0)  
+​KAPAN HARUS MENEKAN TOMBOL RED FLAG?
+
+Jika di tengah interaksi PFA Anda mendapati penyintas mengalami salah satu dari kondisi ini:
+
+​​1. Risiko Keamanan Jiwa Spesifik (Suicidal & Self-Harm Behavior)  
+​Indikator ini diambil langsung dari item kuesioner terstandardisasi:  
+
+\- ​Ideasi / Ungkapan Ingin Mati (SRQ-20 Item \#17): Adanya pemikiran, niat, atau ungkapan eksplisit/implisit untuk mengakhiri hidup (misal: "Lebih baik saya mati saja", "Saya mau nyusul", "Gak ada gunanya hidup").  
+
+\- ​Perilaku Menyakiti Diri (Non-Suicidal Self-Injury): Adanya tindakan aktif melukai diri sendiri (memukulkan kepala ke dinding, menggores kulit, mencabut rambut secara ekstrem).
+
+​2. Gejala Psikotik Akut Bencana (Acute Disaster Psychosis / Dissociation)  
+​Penelitian menunjukkan bahwa trauma berat berpotensi memicu episode disosiasi atau kegagalan realitas:
+
+\- ​Halusinasi visual/auditorik: Melihat atau mendengar hal-hal yang tidak nyata (misal: mendengar suara gempa/ombak susulan yang tidak ada, melihat bayangan ancaman).
+
+\- ​Waham / Delusi Paranoid: Keyakinan ekstrem yang tidak realistis bahwa semua orang di posko ingin mencelakainya atau curiga berlebihan tanpa dasar.
+
+\- ​Disosiasi Parah & Mutisme Akut: Penurunan kesadaran lingkungan, kebingungan disorientasi penuh (tidak tahu siapa dirinya/di mana ia berada), atau mematung (catatonia) dan tidak merespons sama sekali.
+
+​3. Perilaku Agitasi & Gangguan Kendali Impluls (Severe Agitation & Aggression)  
+​Secara neurobiologis, respons fight-or-flight yang berlebih pada trauma akut dapat memicu perilaku tidak terkontrol:
+
+\- ​Amuk / Agitasi Fisik Berat: Perilaku merusak, melemparkan barang, atau menyerang relawan/pengungsi lain secara fisik yang mengancam keselamatan posko.
+
+\- ​Panik Parah yang Tak Terkendali (Extreme Panic Attack): Jeritan histeris menetap yang tidak bisa ditenangkan dengan teknik grounding PFA standar dan disertai tanda fisik krisis.
+
+​4. Kegawatdaruratan Medis & Somatik Akut (Acute Somatic / Medical Crisis)  
+​Distres psikologis akut sering kali bermanifestasi atau berasosiasi dengan krisis fisik yang mengancam jiwa:
+
+\- ​Penurunan Kesadaran / Pingsan Berulang: Kehilangan kesadaran yang diakibatkan oleh trauma emosional berat (psychogenic non-epileptic seizures / pingsan histeris).
+
+\- ​Hyperventilation Syndrome: Napas terlalu cepat dan dangkal hingga menyebabkan kram pada jari-jari tangan (carpopedal spasm), bibir kebas, atau rasa tercekik.
+
+\- ​Gejala Kardiovaskular/Psikosomatik Berat: Nyeri dada hebat, sesak napas akut, atau dada berdebar ekstrem yang sulit dibedakan dengan serangan jantung.
+
+​Langkah Aksi Relawan:  
+1\. ​Tetap Tenang & Mendampingi: JANGAN meninggalkan penyintas sendirian secara fisik.  
+2\. ​Tekan Tombol Melayang: Ketuk tombol 🚨 FLOATING RED FLAG di pojok bawah layar PWA Anda.  
+3\. ​Konfirmasi Sinyal: Pilih nama/NIK penyintas (atau centang "Tanpa Nama"), lalu kirim.  
+4\. ​Tunggu Bantuan: Sinyal T0-Suspect beserta titik GPS Anda telah terkirim ke Tim Medis/PSC 119\. Dampingi penyintas hingga tim medis tiba di lokasi.
+
+BUKU SAKU DIGITAL PFA (HARI 1–3)  
+​Prinsip Utama: Hadir Utuh, Dengarkan, Jangan Menghakimi, dan Berikan Rasa Aman.
+
+​👁️ TAHAP 1: LOOK (AMATI)  
+​Lakukan pemindaian visual singkat selama 10–15 detik sebelum Anda mendekati penyintas.
+
+1\. Amati Keamanan & Kondisi Fisik  
+​Pastikan area sekitar aman dari bahaya fisik susulan (reruntuhan, cuaca ekstrem, jalanan licin).  
+​Perhatikan apakah penyintas mengalami luka fisik berdarah atau cedera berat. (Jika Ada: Segera arahkan ke Tenda Medis/Faskes).
+
+2\. Amati Reaksi Distres Parah  
+​Perhatikan apakah penyintas menunjukkan salah satu perilaku berikut:  
+​Shock / Mutisme: Tatapan mata kosong, mematung, atau tidak merespons saat disapa.  
+​Histeria: Menangis tanpa henti, gemetar hebat, atau napas sangat cepat (hyperventilation).  
+​Agitasi: Ngamuk, berteriak-teriak, atau berperilaku membahayakan.
+
+​💡 Petunjuk Relawan: Jika Anda melihat tanda distres di atas, dekati secara perlahan. Gunakan suara yang lembut dan tenang.
+
+​👂 TAHAP 2: LISTEN (DENGARKAN)  
+​Fokus utama Anda adalah menenangkan dan memfasilitasi emosi penyintas.
+
+1\. Sapa & Tawarkan Bantuan  
+​Script: "Halo Ibu/Bapak, kenalkan saya \[Nama\], relawan pendamping di posko ini. Saya di sini untuk menemani Ibu/Bapak. Ada yang bisa saya bantu atau temani saat ini?"  
+​  
+2\. Panduan Mengolah Emosi (Do's & Don'ts)  
+​✅ DO (Lakukan):  
+​Duduk sejajar (posisi mata sama tinggi dengan penyintas).  
+​Berikan kontak mata yang hangat dan anggukan kepala tanda Anda mendengarkan.  
+​Sediakan air minum atau tisu jika penyintas menangis.  
+​❌ DON'T (Jangan Lakukan):  
+​JANGAN memaksa penyintas menceritakan kronologi kejadian bencana.  
+​JANGAN memberi janji palsu (Contoh salah: "Sabar ya, rumahnya pasti nanti diganti kok").  
+​JANGAN memotong pembicaraan atau membandingkan musibah mereka dengan orang lain.  
+​  
+3\. Teknik Grounding 5-4-3-2-1 (Gunakan Jika Penyintas Panik/Cemas)  
+​Ajak penyintas melakukan latihan fokus fisik singkat berikut untuk mengembalikan kesadarannya:  
+​Napas: "Ayo tarik napas pelan-pelan bersama saya... Tahan... Hembuskan..."  
+​Lihat: "Sebutkan 3 benda yang ada di sekitar Ibu/Bapak saat ini."  
+​Sentuh: "Rasakan pijakan kedua kaki Ibu/Bapak di tanah dan pegang gelas air ini."
+
+​🔗 TAHAP 3: LINK (HUBUNGKAN)  
+​Bantu penyintas menemukan kembali rasa kendali atas kebutuhan dasarnya.  
+1\. Kebutuhan Dasar Logistik  
+​Tanyakan kebutuhan paling mendesak yang mereka perlukan detik ini:  
+​Air minum / Makanan  
+​Selimut / Pakaian kering  
+​Obat-obatan pribadi yang hilang / Tercecer  
+​Popok / Perlengkapan bayi atau lansia  
+​  
+2\. Menghubungkan Dukungan Sosial  
+​Script: "Apakah ada anggota keluarga inti atau kerabat dekat yang ingin Ibu/Bapak hubungi saat ini?"  
+​Bantu sambungkan ke Posko Informasi / Pencarian Orang Hilang jika mereka terpisah dari keluarga.  
+​  
+3\. Penutup Sesi PFA  
+​Script: "Merasa sedih, cemas, atau bingung setelah kejadian ini adalah hal yang sangat wajar, Bu/Pak. Ibu/Bapak tidak sendiri. Saya dan tim relawan ada di sekitar posko ini jika Ibu/Bapak membutuhkan bantuan lagi ya."
+
+PANDUAN WAWANCARA SRQ-20 UNTUK RELAWAN (HARI 4–30)
+
+​Pesan Pembuka Relawan (Script Onboarding)  
+​"Halo Ibu/Bapak, saya mau bincang-bincang santai sebentar untuk menanyakan kabar, kondisi fisik, dan perasaan Ibu/Bapak selama beberapa hari di pengungsian ini. Tidak ada jawaban benar atau salah, jawab sesuai yang dirasakan saja ya."
+
+​1. Apakah Sdr sering sakit kepala?    
+\- ​Script Pertanyaan: "Selama di posko ini, kepala Ibu/Bapak sering terasa berat, cekot-cekot, atau pusing berulang nggak?"  
+\- ​Petunjuk Relawan: Pastikan pusing bukan karena kurang minum atau terik matahari saja, melainkan pusing tegang yang terus muncul akibat pikiran tertekan.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "pusing", "sakit kepala", "cekot-cekot", "kepala berat".
+
+​2. Apakah nafsu makan Sdr menurun?    
+\- ​Script Pertanyaan: "Gimana dengan makanan di posko? Apakah merasa makanan sama sekali gak enak atau rasanya males banget buat makan?"  
+\- ​Petunjuk Relawan: Centang "Ya" jika penyintas menyisakan sebagian besar porsi makan bukan karena makanan tidak cocok, melainkan karena memang kehilangan selera makan.    
+\- ​Auto-Checklist Keywords (Speech-to-Text): "gak nafsu makan", "males makan", "makanan gak masuk", "gak selera".
+
+​3. Apakah Sdr tidak bisa tidur nyenyak?    
+\- ​Script Pertanyaan: "Malam-malam kalau mau tidur susah nggak? Atau sering kebangun terus gak bisa tidur lagi?"  
+\- ​Petunjuk Relawan: Bedakan antara tidak bisa tidur karena tempatnya berisik/panas dengan tidak bisa tidur karena pikiran berputar atau cemas.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "gak bisa tidur", "insomnia", "melek terus", "kebangun-bangun".
+
+​4. Apakah Sdr mudah merasa takut?    
+\- ​Script Pertanyaan: "Belakangan ini, apakah Ibu/Bapak gampang kaget atau merasa was-was/takut tiba-tiba padahal situasi lagi aman?"  
+\- ​Petunjuk Relawan: Amati respon refleks penyintas terhadap suara keras mendadak di posko (misal: suara helikopter, sirine, atau barang jatuh).  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "takut", "was-was", "gampang kaget", "kawatir".
+
+​5. Apakah tangan Sdr gemetar?    
+\- ​Script Pertanyaan: "Apakah tangan atau jari-jari Ibu/Bapak sering terasa gemetar sendiri pas lagi duduk atau ngobrol?"  
+\- ​Petunjuk Relawan: Dapat diisi via observasi langsung. Perhatikan apakah jari/tangan penyintas tampak tremor (gemetar) saat memegang gelas, memegang HP, atau saat diajak bicara.    
+\- ​Auto-Checklist Keywords (Speech-to-Text): "gemetar", "dég-dégan", "tremor", "tangan gemeter".
+
+​6. Apakah Sdr merasa cemas, tegang, atau khawatir?    
+\- ​Script Pertanyaan: "Dada rasanya sering debar-debar, tegang, atau ganjel karena kepikiran terus nggak?"  
+\- ​Petunjuk Relawan: Kata "ganjel di dada" atau "deg-degan" adalah bahasa awam yang paling sering menggambarkan kondisi cemas.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "cemas", "tegang", "dada sesek", "deg-degan", "gelisah".
+
+​7. Apakah pencernaan Sdr buruk?    
+\- ​Script Pertanyaan: "Perutnya sering terasa mual, melilit, atau bolak-balik diare tanpa sebab yang jelas nggak?"  
+\- ​Petunjuk Relawan: Tanyakan apakah keluhan pencernaan ini timbul terutama saat rasa cemas atau ingatan bencana muncul (reaksi psikosomatik).  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "mual", "diare", "pencernaan ganggu", "perut melilit".
+
+​8. Apakah Sdr mengalami kesulitan untuk berpikir jernih?    
+\- ​Script Pertanyaan: "Rasanya kepalanya kayak penuh banget atau 'linglung', sampai susah konsentrasi pas diajak ngobrol?"  
+\- ​Petunjuk Relawan: Perhatikan apakah penyintas sering melamun, tampak bingung, atau meminta pertanyaan diulang berintegrasi dengan gejala kognitif.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "linglung", "bingung", "gak fokus", "pikirannya kosong".
+
+​9. Apakah Sdr merasa tidak bahagia?    
+\- ​Script Pertanyaan: "Secara umum, rasanya sedih dan hampa banget ya perasaan Ibu/Bapak belakangan ini?"  
+\- ​Petunjuk Relawan: Amati nada suara yang lesu dan ekspresi wajah penyintas saat menjawab.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "sedih", "hampa", "gak bahagia", "merana".
+
+​10. Apakah Sdr lebih sering menangis dari biasanya?    
+\- ​Script Pertanyaan: "Apakah belakangan ini rasanya pengen menangis terus, atau mendadak nangis tanpa bisa ditahan?"  
+\- ​Petunjuk Relawan: Validasi emosi penyintas. Jangan melarang mereka menangis saat wawancara berlangsung.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "nangis terus", "pengen nangis", "menangis", "mewek".
+
+​11. Apakah Sdr sulit menikmati kegiatan sehari-hari?    
+\- ​Script Pertanyaan: "Hal-hal yang biasanya bikin senang (kayak ngobrol sama tetangga, nonton, atau main sama anak), sekarang rasanya udah gak menarik lagi nggak?"  
+\- ​Petunjuk Relawan: Amati apakah penyintas cenderung mengisolasi diri di sudut posko dan enggan bersosialisasi.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "gak seru lagi", "males ngapa-ngapain", "gak hobi lagi".  
+​12. Apakah Sdr merasa kesulitan untuk mengambil keputusan?    
+\- ​Script Pertanyaan: "Buat milih atau memutuskan hal sepele aja (misal: mau makan apa, mau mandi jam berapa), rasanya bingung dan berat banget nggak?"  
+\- ​Petunjuk Relawan: Fokus pada keraguan berlebih untuk melakukan tindakan atau pilihan sederhana sehari-hari.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "bingung milih", "gak bisa mutusin", "ragu-ragu terus".  
+​13. Apakah hasil kerja sehari-hari Sdr memburuk?    
+\- ​Script Pertanyaan: "Apakah tugas sehari-hari di posko terasa lambat banget selesainya atau sering terbengkalai?"  
+\- ​Petunjuk Relawan: Nilai keberfungsian dasar penyintas dalam menjaga kebersihan diri, merawat anak, atau merapikan tenda.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "gak keurus", "tugas terbengkalai", "lambat ngerjainnya".
+
+​14. Apakah Sdr merasa tidak bisa melakukan hal yang bermanfaat dalam hidup?    
+\- ​Script Pertanyaan: "Apakah Ibu/Bapak merasa belakangan ini gak bisa berbuat apa-apa dan cuma bikin repot orang lain aja?"  
+\- ​Petunjuk Relawan: Dengarkan ungkapan keputusasaan atau rasa bersalah (survivor's guilt) atas bencana yang terjadi.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "gak berguna", "nyusahin orang", "gak ada gunanya".
+
+​15. Apakah Sdr kehilangan minat untuk melakukan berbagai macam hal?    
+\- ​Script Pertanyaan: \- "Apakah rasanya udah kehilangan semangat total buat ngelakuin kegiatan apa pun hari ini?"  
+\- ​Petunjuk Relawan: Bedakan dengan nomor 11; nomor 15 lebih berfokus pada kehilangan dorongan energi/inisiatif (apati).  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "hilang minat", "males semua", "gak ada semangat".
+
+​16. Apakah Sdr merasa sebagai orang yang tidak berharga?    
+\- ​Script Pertanyaan: "Pernah merasa kalau keberadaan Ibu/Bapak ini udah gak ada harganya atau merasa diri ini gagal?"  
+\- ​Petunjuk Relawan: Perhatikan tanda-tanda devaluasi diri yang mendalam (low self-esteem).  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "gak berharga", "diri saya gagal", "gak ada artinya".
+
+​17. Apakah Sdr memiliki pemikiran untuk mengakhiri hidup?    
+\- ​Script Pertanyaan: "Dalam kondisi seberat ini, pernah nggak terlintas di pikiran Ibu/Bapak perasaan pengen nyerah aja, atau pikiran buat ngakhiri hidup?"  
+\- ​Petunjuk Relawan & System Logic:
+
+​🚨 CRITICAL SAFETY GATE TRIGGER: Jika Penyintas menjawab "YA" atau menyebut kata kunci, SISTEM AUTOMATIS MEMICU STATUS RED FLAG (T0-SUSPECT) tanpa memedulikan skor pertanyaan lainnya\!  
+​Munculkan pop-up tombol darurat: \[ TRIGGER T0 RED-FLAG EMERGENCY \]. Relawan diinstruksikan tetap mendampingi penyintas secara fisik sementara sinyal dikirim ke Faskes/PSC 119\.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "mati", "bunuh diri", "nyerah", "nyusul", "diakhirin aja", "gak mau hidup".
+
+​18. Apakah Sdr merasa lelah sepanjang waktu?    
+\- ​Script Pertanyaan: "Badan dan pikiran rasanya lemes dan capek banget nggak sepanjang hari, padahal gak lagi kerja berat?"  
+\- ​Petunjuk Relawan: Fokus pada rasa lelah emosional/fisik yang menetap (fatigue) meski sudah beristirahat.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "lelah terus", "capek banget", "badan lemes".
+
+​19. Apakah Sdr merasakan perasaan tidak nyaman di perut?    
+\- ​Script Pertanyaan: "Apakah perut sering terasa ganjel, perih di ulu hati, atau kayak ada rasa kebat/melilit yang bikin gak nyaman?"  
+\- ​Petunjuk Relawan: Melengkapi pertanyaan nomor 7, fokus pada rasa tidak nyaman fisik umum di area abdomen akibat stres.  
+\- ​Auto-Checklist Keywords (Speech-to-Text): "ulu hati sakit", "perut gak enak", "perih perut".
+
+​20. Apakah Sdr mudah merasa lelah?    
+\- ​Script Pertanyaan: "Baru gerak atau ngerjain hal kecil sebentar aja, rasanya langsung kehabisan tenaga dan capek banget nggak?"  
+\- ​Petunjuk Relawan: Menilai penurunan daya tahan fisik akibat beban psikologis.  
+ \- ​Auto-Checklist Keywords (Speech-to-Text): "gampang capek", "cepet lelah", "tenaga habis".
+

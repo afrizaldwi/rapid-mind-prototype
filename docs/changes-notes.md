@@ -386,3 +386,32 @@ Gate ini memakai sesi browser Relawan dan dua sesi Nakes terpisah, emergency/pas
 | L | PASS | Emergency anonim tidak menampilkan riwayat pasien; source structurally skips history loader saat `patientNik` tidak ada. Validasi aktif setelah snapshot server sehat. |
 
 Gating yang diamati langsung: initial loading, cache/fromCache, workflowIssue, invalid origin, request in flight, dan transaction success sebelum listener confirmation. Listener error callback nyata **NOT DIRECTLY VERIFIED** di browser. `hasPendingWrites` gating **NOT DIRECTLY VERIFIED** di browser karena uji direct client no-op write ditolak oleh auto-review sesuai batas H yang melarang direct backend mutation di luar UI. Kedua kondisi ini tetap dicakup oleh production write guard dan automated tests, tetapi tidak dicatat sebagai browser-observed.
+
+## 2026-09-28 — Phase 4.1 Admin Read Model + Real-Time Command Center
+
+**COMPLETE / PASS untuk selected prototype scope.** `src/lib/adminReadModel.js` membaca PFA, SRQ persisted, triase legacy, dan emergency T0 secara terpisah; malformed case/origin diisolasi, workflow rusak mempertahankan origin T0 dengan warning. Save-side validator `caseRecords.js` tidak diubah. SRQ T1/T2/T3 dihitung sekali per NIK dari asesmen bertanggal terbaru (timestamp sama: ID dokumen leksikografis); Nakes downgrade T1/T2 dan legacy zone terpisah. Pemilihan status terkini memakai timestamp `<= now`; catatan bertanggal masa depan tetap ada dalam riwayat tetapi tidak menggantikan SRQ terkini, asesmen terbaru, atau snapshot nama/posko. Dashboard menampilkan jumlah dan peringatan catatan masa depan. Rolling 30-day mencakup `now - 30 × 24 jam` hingga `now` inklusif berdasarkan timestamp persisted. Koordinat modern tanpa fallback; `0,0` valid.
+
+Dashboard kini memiliki listener independen `cases` dan `emergencies`, perhatian T0 aktif, status freshness/error, aktivitas modern, dan tabel pasien longitudinal; filter asesmen tidak menyembunyikan T0. CasesPage menampilkan skor/base tier/final tier SRQ yang tersimpan, PFA, legacy, filter, dan warning malformed. Map/Stats tidak diubah (Phase 4.2). Tes `tests/adminReadModel.test.js`: 25 tes (7 tes hardening tambahan). `npm test` **320/320 PASS (18 file)**; lint **PASS** dengan warning baseline, build **PASS** dengan warning dependency `eval`/bundle baseline, diff-check di luar `docs/workflow.md` **PASS**; full `git diff --check` gagal karena whitespace pada perubahan workflow milik pengguna yang dipertahankan. Browser gate Phase 4.1 A–L **PASS** untuk scope prototipe terpilih di bawah Test Mode. Source, future-timestamp hardening, dan strict string NIK hardening telah direview.
+
+Phase 4.2 Modern Geospatial + Analytics dan Phase 4.3 Admin Account Provisioning + Hospital Registry masih planned; hospital-aware referral routing menyusul registri. Belum ada full E2E suite; Dexie populated v2 → v4 NOT RUNTIME TESTED; Relawan History lintas browser dan idempotensi PFA masih gap; wording/klasifikasi klinis provisional; Risk/Function adjustment belum didefinisikan; restricted Rules belum deployed, emergency-create Playground FAIL/unresolved, dan backend authorization/emulator Rules belum diuji. Browser Test Mode ini hanya validasi perilaku aplikasi/demo, bukan keamanan backend.
+
+### Gate browser Phase 4.1 — A–L PASS (dilaporkan pengguna)
+
+| Gate | Hasil browser untuk scope prototipe terpilih |
+|---|---|
+| A — PFA baru | PASS: PFA Relawan muncul live di Admin; jumlah PFA dan NIK unik naik sekali, row pasien muncul; SRQ/T0 tetap. |
+| B — SRQ pasien kembali | PASS: SRQ muncul live; skor, base tier, dan final tier persisted cocok Result dan detail Cases; jumlah SRQ naik, NIK unik tetap, latest/current tier berubah. |
+| C — SRQ berulang | PASS: PFA/SRQ pasien 1/2; SRQ lama tetap historis, yang terbaru menjadi latest, current tier menghitung pasien sekali. |
+| D — Refresh | PASS: Dashboard rehidrasi counters, agregasi pasien, latest dan riwayat SRQ tanpa duplikat. |
+| E — SRQ masa depan | PASS: tercatat sebagai histori dan warning, menambah total SRQ/riwayat, tetapi tidak mengubah latest SRQ/assessment, nama/posko/current tiers/NIK unik, atau rolling 30-day; aktivitas dilabel non-current. |
+| F — Case malformed | PASS: dihitung sebagai malformed, terisolasi dari proyeksi/metrik/aktivitas, data sehat tetap tampil. |
+| G — T0-Suspect baru | PASS: emergency Red Flag muncul live, menaikkan perhatian T0 tanpa mengubah asesmen/SRQ. |
+| H — T0 confirmed aktif | PASS: konfirmasi Nakes dan referral belum completed tetap dalam perhatian aktif; origin T0-Suspect immutable, tidak ada duplikat atau dampak SRQ. |
+| I — Referral completed | PASS: keluar dari perhatian aktif tetapi dokumen dan origin/validasi T0 serta status completed tetap historis; asesmen/SRQ tetap. |
+| J — Downgrade Nakes T1 | PASS: perhatian T0 turun dan metrik downgrade T1 naik; origin T0-Suspect tetap; tier SRQ T1/T2/T3 dan jumlah PFA/SRQ tidak berubah. Provenance downgrade Nakes T1/T2 terpisah dari tier SRQ T1/T2. |
+| K — Workflow emergency malformed | PASS: origin T0-Suspect valid dipertahankan; warning/workflow issue naik tanpa mencemari metrik SRQ/downgrade atau mengganggu emergency lain. |
+| L — Filter, detail, freshness | PASS: filter aktivitas PFA/SRQ tidak menyembunyikan T0; Cases menampilkan PFA/SRQ/legacy, kasus future sebagai histori, warning malformed, search, filter jenis/tier/posko, detail SRQ persisted dan PFA terpisah; refresh tanpa duplikat. |
+
+**Freshness DIRECTLY VERIFIED di browser:** Cases dan Emergencies menunjukkan `Live dari server` saat online; saat network browser Offline, Dashboard beralih ke cache/pending dan tidak menyajikan data sebagai server-confirmed current; setelah reconnect kedua stream kembali live/server-confirmed. Listener error callback Firestore nyata **NOT DIRECTLY VERIFIED** di browser; cakupan otomatis terpisah. Gate ini bukan full E2E atau verifikasi backend authorization. Restricted Rules belum deployed, emergency-create Rules Playground FAIL/unresolved, dan tes Rules emulator belum dilakukan.
+
+**UX ditunda:** UI Admin Phase 4.1 sudah tervalidasi secara fungsional tetapi bukan UX final. Riwayat longitudinal, terutama beberapa SRQ yang kini dipadatkan dalam satu row/sel history, pemisahan current state vs full history vs rolling-window history vs anomali data, responsive/table density, serta hierarki dan konsistensi visual perlu perbaikan. Kebutuhan UI Map/Stats modern termasuk Phase 4.2; redesain/polish Admin menyeluruh termasuk Phase 5.5.

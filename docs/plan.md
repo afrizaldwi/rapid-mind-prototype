@@ -2,7 +2,7 @@
 
 > **Dokumen:** Rencana Eksekusi & Implementasi Prototipe RAPID-MIND  
 > **Tanggal Pembaruan:** 28 September 2026
-> **Status:** **Phase 2C, Phase 3.1, dan Phase 3.2B PASS untuk scope prototipe terpilih. Source Phase 3.2A tersedia; restricted Rules belum deployed dan Relawan emergency-create Playground masih FAIL / unresolved. Phase 3.2B COMPLETE / PASS untuk selected prototype scope: source, 295/295 tes otomatis, dan browser smoke A-L PASS di bawah Test Mode Rules. Belum full E2E; migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
+> **Status:** **Phase 2C, Phase 3.1, dan Phase 3.2B PASS untuk scope prototipe terpilih. Source Phase 3.2A tersedia; restricted Rules belum deployed dan Relawan emergency-create Playground masih FAIL / unresolved. Phase 3.2B COMPLETE / PASS untuk selected prototype scope: source, 295/295 tes otomatis, dan browser smoke A-L PASS di bawah Test Mode Rules. Phase 4.1 COMPLETE / PASS untuk scope prototipe terpilih (320/320 tes, gate browser A–L PASS di bawah Test Mode). Belum full E2E; migrasi v2 berisi data → v4 NOT RUNTIME TESTED.**
 > **Target:** Prototipe demo end-to-end tanpa *dead end*, mencakup alur Relawan, Faskes/PSC 119, dan Admin BPBD/Dinkes.
 
 ---
@@ -16,7 +16,7 @@
 | Legacy verbal/non-verbal triage | ✅ | Tetap tersedia eksplisit; alur produksi PFA selesai menuju SRQ |
 | Phase 1A: `cases` bertipe/berversi | ✅/⚠️ | Source, pemeriksaan manual browser/runtime terpilih, dan Vitest PASS; belum full E2E |
 | Offline `patients` dan `cases` + reconnect sync | ✅ | Startup/reconnect pasien dan pasien baru offline → reconnect lulus smoke test manual |
-| Dashboard Admin dasar | ✅ | Snapshot `getDocs`, belum real-time |
+| Dashboard Admin Phase 4.1 | ⚠️ | `cases` dan `emergencies` live via `onSnapshot`; automated dan browser A–L PASS |
 | **Screen 2 Patient Lookup** | ✅/⚠️ | Routing PFA selesai/resume SRQ lulus smoke browser Phase 2C; History lintas browser masih terbuka |
 | Dexie v4 `patients` + `emergencies` | ✅/⚠️ | Baseline v4 bersih PASS; migrasi v2 berisi data → v4 NOT RUNTIME TESTED |
 | PFA LOOK/LISTEN/LINK | ✅/⚠️ | Selesai untuk scope terpilih: source, 78/78 tes otomatis, smoke test percabangan, dan retest pre-merge PASS; belum full E2E |
@@ -28,7 +28,7 @@
 | Role 2 Faskes Phase 3.1 | ✅ | Antrean read-only real-time dan smoke browser dua sesi PASS; write workflow Phase 3.2/rules masih terbuka |
 | Role 2 Faskes Phase 3.2A | ⚠️ | Source dan tes aplikasi tersedia; restricted Rules belum deployed dan otorisasi runtime belum diverifikasi |
 | Role 2 Faskes Phase 3.2B | ✅/⚠️ | COMPLETE / PASS untuk scope prototipe terpilih: source, 295/295 tes otomatis, dan browser smoke A-L PASS di bawah Test Mode Rules; bukan verifikasi otorisasi backend |
-| Admin real-time/longitudinal | ❌ | Belum ada |
+| Admin read model + real-time/longitudinal Phase 4.1 | ⚠️ | Source, 320/320 tes, dan browser A–L PASS; Map/Stats tetap Phase 4.2 |
 
 ### Milestone yang sudah selesai dari plan sebelumnya
 
@@ -330,58 +330,54 @@ Parser cloud mempertahankan origin T0 yang valid saat namespace workflow malform
 
 ---
 
-## Phase 4 — Role 3 Admin Real-Time & Longitudinal
+## Phase 4 — Role 3 Admin
 
-### 4.1 Migrate admin reads to real-time where valuable
+### Phase 4.1 — Admin Read Model + Real-Time Command Center
 
-Prioritas `onSnapshot`:
-1. Dashboard KPI/T0 banner.
-2. Map active status.
-3. Optional cases table.
+**COMPLETE / PASS untuk selected prototype scope.** `adminReadModel.js` memproyeksikan PFA, hasil SRQ tersimpan, triase legacy, origin T0 immutable, validasi/referral, dan dokumen bermasalah secara terpisah. Hasil SRQ historis tidak dihitung ulang; validator save di `caseRecords.js` tetap ketat. Metrik SRQ T1/T2/T3 memilih satu asesmen SRQ bertanggal terbaru yang `<= now` per NIK; waktu sama diputuskan oleh ID dokumen leksikografis. Catatan masa depan tetap di riwayat, tidak menjadi asesmen/snapshot pasien terkini, dan dihitung dalam peringatan kualitas data. Downgrade Nakes dan zona legacy tidak masuk metrik SRQ. Pasien terdata berarti NIK valid unik yang teramati dalam `cases`, bukan jumlah pengungsi.
 
-Tidak semua halaman harus real-time jika tidak memberi nilai demo.
+Dashboard mendengarkan `cases` dan `emergencies` secara independen dengan `onSnapshot`, membersihkan listener saat unmount, serta membedakan loading, cache/pending, dan error dari data server segar. T0 aktif berarti suspect belum diputuskan atau confirmed dengan referral belum selesai; workflow malformed dipertahankan sebagai origin valid dengan peringatan terpisah. Filter PFA/Akut atau SRQ/Lanjutan tidak menyembunyikan perhatian T0. CasesPage menampilkan hasil SRQ persisted, PFA, legacy, filter, dan jumlah dokumen ditolak. `MapPage.jsx` dan `StatsPage.jsx` belum diubah.
 
-### 4.2 4-tier visual migration
+Rolling 30-day window memakai timestamp asesmen persisted, dari `now - 30 × 24 jam` sampai `now` inklusif; kasus lebih tua dan timestamp masa depan di luar jendela. Tidak ada day-zero bencana yang terpercaya, sehingga tidak ada label Day 1–30. Kasus tanpa waktu valid tetap terlihat dalam daftar/riwayat tetapi tidak masuk jendela atau pemilihan SRQ terkini. Ringkasan nama/posko memilih snapshot terbarukan yang tersedia tanpa menggabungkan field dari snapshot berbeda. Koordinat modern hanya pasangan angka finite valid, termasuk `0,0`; tidak ada lokasi fallback dalam read model.
 
-- Ganti agregasi merah/kuning/hijau menjadi T0/T1/T2/T3.
-- T0 emergency active harus terlihat berbeda dari T1 high risk.
-- Pertahankan compatibility mapper sementara bila legacy seed masih digunakan selama transisi.
+Bukti otomatis: `npm test` **320/320 PASS (18 file)**; `npm run lint` **PASS** dengan warning baseline lama; `npm run build` **PASS** dengan warning dependency `eval`/bundle lama; diff-check di luar `docs/workflow.md` **PASS**; full `git diff --check` gagal karena whitespace pada perubahan workflow milik pengguna yang dipertahankan. Gate browser A–L Phase 4.1 **PASS**: penerimaan PFA/SRQ/T0 live, current/latest per pasien, refresh, isolasi future/malformed, referral completed, downgrade Nakes terpisah dari SRQ, filter/detail Cases, dan freshness. Cache/pending offline serta pemulihan kedua stream saat reconnect **DIRECTLY VERIFIED** di browser; listener error callback nyata **NOT DIRECTLY VERIFIED**. Validasi di bawah Test Mode membuktikan perilaku aplikasi/demo untuk scope terpilih, bukan full E2E atau otorisasi backend. Restricted Rules belum deployed, Relawan emergency-create Playground tetap FAIL/unresolved, dan emulator Rules tests belum dilakukan.
 
-### 4.3 Phase filter
+### Phase 4.2 — Modern Geospatial + Analytics
 
-- Akut Hari 1–3.
-- Lanjutan Hari 4–30.
+**PLANNED.** Migrasi Map/Stats ke read model Phase 4.1 dan agregat geospasial/analitik T0/T1/T2/T3 yang menjaga provenance SRQ, T0, downgrade Nakes, dan legacy. Tidak ada heatmap atau lokasi sintetis dalam Phase 4.1.
 
-### 4.4 Longitudinal patient view
+### Phase 4.3 — Admin Account Provisioning + Hospital Registry
 
-- Master patient table.
-- Search NIK/nama.
-- History assessment per pasien.
-- Mini trend/sparkline hanya jika data time-series sudah tersedia; jangan membuat trend sintetis tanpa label demo.
+**PLANNED ONLY.** Provisioning akun Admin/Nakes dan registri organisasi kesehatan/rumah sakit memerlukan desain serta gate keamanan tersendiri. Routing T0 sadar organisasi/rumah sakit adalah Phase 5.1 setelah registri tersedia.
 
-### 4.5 Map enhancement
+### Phase 4.4 — Volunteer / Resource Management
 
-Urutan:
-1. Marker status T0/T1/T2/T3.
-2. Popup ringkasan posko.
-3. Baru setelah itu optional `leaflet.heat` density layer.
+**PLANNED.** Pengelolaan relawan dan sumber daya.
 
-### 4.6 Export
+### Roadmap Phase 5
 
-PDF/Excel berada setelah flow data benar. Untuk demo awal, CSV export dapat menjadi fallback termurah jika export kompleks mengganggu deadline.
+| Fase | Pekerjaan |
+|---|---|
+| 5.1 | Organization/Hospital-Aware T0 Routing |
+| 5.2 | SRQ Item 17 + STT Safety Automation |
+| 5.3 | Real Day 1–30 Monitoring Semantics |
+| 5.4 | Export / Reporting |
+| 5.5 | PWA / Demo Hardening, termasuk Admin UX redesign/polish menyeluruh |
+
+**UX ditunda:** Admin 4.1 tervalidasi fungsional tetapi bukan UX final. Riwayat longitudinal memadatkan beberapa SRQ ke satu row/sel history. Perlu pemisahan current state, full history, rolling-window history, dan anomali data; responsive/table density; serta hierarki/konsistensi visual. UI fungsional Map/Stats ditangani Phase 4.2, polish Admin menyeluruh Phase 5.5.
 
 ---
 
 ## Phase 5 — Demo Hardening, PWA, dan Cleanup
 
-### 5.1 PWA assets
+### PWA assets (roadmap Phase 5.5)
 
 - Tambah `public/icon-192.png`.
 - Tambah `public/icon-512.png`.
 - Sinkronkan `includeAssets` dengan asset yang benar (`favicon.svg` atau sediakan `.ico`).
 - Tambah metadata PWA/mobile yang diperlukan di `index.html`.
 
-### 5.2 Seed migration final
+### Seed migration final
 
 Fixture demo Phase 5 yang diprovisi lewat jalur berprivilege, bukan dari browser Admin, harus menghasilkan dataset yang konsisten:
 - patients.
@@ -391,14 +387,14 @@ Fixture demo Phase 5 yang diprovisi lewat jalur berprivilege, bukan dari browser
 - posko coordinates.
 - relasi `patientNik` yang valid.
 
-### 5.3 Legacy cleanup
+### Legacy cleanup
 
 Setelah route baru stabil:
 - Tentukan apakah `TriagePage`, `VerbalPage`, dan `NonVerbalPage` tetap dipakai sebagai fallback/demo atau dihapus.
 - Hapus dead imports dan logic zona lama yang tidak lagi digunakan.
 - Jangan menghapus sebelum regression test route baru selesai.
 
-### 5.4 Build/lint/demo test
+### Build/lint/demo test
 
 Minimum gate sebelum presentasi:
 
@@ -470,7 +466,7 @@ Lalu jalankan semua scenario demo pada browser normal + simulated offline.
 3. Kirim T0-Suspect.
 4. Session Faskes/Nakes menerima event via `onSnapshot` tanpa refresh, menampilkan data origin, dan tetap menampilkan event valid bila dokumen lain malformed.
 5. Ulangi tanpa NIK, lalu uji offline→reconnect dan pastikan tidak ada dokumen duplikat.
-6. **Phase 3.2 nanti:** Tele-Emergency, confirm/downgrade, referral/transport; Admin real-time pada Phase 4.
+6. **Milestone Admin:** Phase 4.1 source/automated dan browser A–L PASS; Phase 4.2 Map/Stats modern dan Phase 4.3 provisioning/registri direncanakan.
 
 ### Scenario D — Offline Patient + Assessment
 
@@ -520,4 +516,4 @@ Setiap prompt Codex harus menyertakan:
 - test/build/lint requirement;
 - instruksi memperbarui `docs/changes-notes.md` setelah task berhasil.
 
-**Status terkini:** Phase 2C dan smoke browser A–J tetap **PASS**; Phase 3.1 tetap **PASS** untuk scope sebelumnya (222/222 tes saat gate 3.1). Source Phase 3.2A menyediakan Rules lokal dan layanan transaksi, tetapi emergency-create Playground **FAIL / unresolved**, restricted Rules **belum deployed**, dan otorisasi runtime **NOT PERFORMED**. Phase 3.2B **COMPLETE / PASS untuk selected prototype scope**: source implementation complete, `npm test` **295/295 PASS** (17 file), lint/build/diff-check PASS dengan warning lama, dan browser smoke A-L PASS di bawah Test Mode Rules. Hasil ini memverifikasi immutable T0-Suspect origin, workflow secondary validation/referral dua sesi Nakes, dan boundary riwayat Faskes server-only untuk scope terpilih; bukan full E2E, bukan verifikasi restricted Rules, dan bukan bukti Test Mode aman. Listener error callback nyata serta `hasPendingWrites` gating **NOT DIRECTLY VERIFIED** di browser. Admin real-time/longitudinal tetap Phase 4. Pada Phase 2B, smoke scenario C **PASS WITH LIMITATION** karena akurasi Whisper lokal; transkrip tidak memetakan jawaban SRQ otomatis. Adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED** dan v1 tetap `finalTier === baseTier`; klasifikasi SRQ/Risk-Function maupun wording protokol/klinis belum divalidasi klinis. T0 tetap emergency terpisah dari klasifikasi SRQ dan triase legacy tetap didukung. Belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.
+**Status terkini:** Phase 2C dan smoke browser A–J tetap **PASS**; Phase 3.1 tetap **PASS** untuk scope sebelumnya (222/222 tes saat gate 3.1). Source Phase 3.2A menyediakan Rules lokal dan layanan transaksi, tetapi emergency-create Playground **FAIL / unresolved**, restricted Rules **belum deployed**, dan otorisasi runtime **NOT PERFORMED**. Phase 3.2B **COMPLETE / PASS untuk selected prototype scope**: source implementation complete, `npm test` **295/295 PASS** (17 file), lint/build/diff-check PASS dengan warning lama, dan browser smoke A-L PASS di bawah Test Mode Rules. Hasil ini memverifikasi immutable T0-Suspect origin, workflow secondary validation/referral dua sesi Nakes, dan boundary riwayat Faskes server-only untuk scope terpilih; bukan full E2E, bukan verifikasi restricted Rules, dan bukan bukti Test Mode aman. Listener error callback nyata serta `hasPendingWrites` gating **NOT DIRECTLY VERIFIED** di browser. Admin Phase 4.1 COMPLETE/PASS untuk scope terpilih: 320/320 tes, lint/build PASS dengan warning lama, gate browser A–L PASS di Test Mode, dan cache/pending offline serta reconnect DIRECTLY VERIFIED; listener error callback nyata NOT DIRECTLY VERIFIED. Map/Stats Phase 4.2, provisioning/registri Phase 4.3, dan roadmap 4.4–5.5 masih planned. Pada Phase 2B, smoke scenario C **PASS WITH LIMITATION** karena akurasi Whisper lokal; transkrip tidak memetakan jawaban SRQ otomatis. Adjustment Risk/Function **NOT DEFINED / NOT IMPLEMENTED** dan v1 tetap `finalTier === baseTier`; klasifikasi SRQ/Risk-Function maupun wording protokol/klinis belum divalidasi klinis. T0 tetap emergency terpisah dari klasifikasi SRQ dan triase legacy tetap didukung. Belum ada suite E2E penuh. `/relawan/history` lintas browser serta hardening idempotensi penyelesaian PFA tetap gap terpisah. Migrasi v2 berisi data → v4 tetap **NOT RUNTIME TESTED**; kode migrasi dipertahankan.
