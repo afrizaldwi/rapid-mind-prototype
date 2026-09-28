@@ -171,3 +171,79 @@ describe('Admin emergency operations', () => {
     expect(result.rejected.map((item) => item.id)).toEqual(['partial']);
   });
 });
+
+describe('Phase 4.2 geospatial and analytics projections', () => {
+  it('maps one latest eligible persisted SRQ per NIK without borrowing older, PFA, or same-posko coordinates', () => {
+    const result = model(snapshot(
+      doc('older', srq({ tier: 'T1', location: { lat: 1, lng: 1 }, timestamp: at('2026-09-26T00:00:00Z') })),
+      doc('latest', srq({ tier: 'T2', location: undefined, poskoName: 'Posko A' })),
+      doc('pfa', pfa({ location: { lat: 2, lng: 2 } })),
+      doc('other', srq({ patientNik: otherNik, tier: 'T3', poskoName: 'Posko A', location: { lat: 3, lng: 3 } })),
+    ));
+    expect(result.metrics.latestTiers).toEqual({ T1: 0, T2: 1, T3: 1 });
+    expect(result.metrics.currentSrqWithoutCoordinates).toBe(1);
+    expect(result.geospatial).toMatchObject([{ coordinates: { lat: 3, lng: 3 }, T0: 0, T1: 0, T2: 0, T3: 1 }]);
+  });
+  it('aggregates exact observed coordinates deterministically and preserves 0,0', () => {
+    const result = model(snapshot(
+      doc('a', srq({ tier: 'T1', location: { lat: 0, lng: 0 }, poskoName: 'B' })),
+      doc('b', srq({ patientNik: otherNik, tier: 'T2', location: { lat: 0, lng: 0 }, poskoName: 'A' })),
+    ), snapshot(doc('e', origin({ lat: 0, lng: 0, poskoName: 'C' }))));
+    expect(result.geospatial).toMatchObject([{ key: '0,0', labels: ['A', 'B', 'C'], T0: 1, T1: 1, T2: 1, T3: 0 }]);
+    expect(result.metrics.activeT0).toBe(1);
+    expect(result.metrics.latestTiers).toEqual({ T1: 1, T2: 1, T3: 0 });
+  });
+  it.each([
+    undefined, { lat: 0 }, { lng: 0 }, { lat: '0', lng: 0 }, { lat: 0, lng: '0' },
+    { lat: 91, lng: 0 }, { lat: -91, lng: 0 }, { lat: 0, lng: 181 }, { lat: 0, lng: -181 },
+    { lat: NaN, lng: 0 }, { lat: Infinity, lng: 0 },
+  ])('does not create an SRQ point from invalid coordinates %j', (location) => {
+    const result = model(snapshot(doc('s', srq({ location }))));
+    expect(result.geospatial).toEqual([]);
+    expect(result.metrics.currentSrqWithoutCoordinates).toBe(1);
+  });
+  it('keeps future emergencies and SRQs historical but excludes them from current points and T0 KPI', () => {
+    const result = model(snapshot(
+      doc('now-srq', srq({ tier: 'T2', location: { lat: 0, lng: 0 }, timestamp: at('2026-09-28T00:00:00.000Z') })),
+      doc('future-srq', srq({ tier: 'T1', location: { lat: 1, lng: 1 }, timestamp: at('2026-09-28T00:00:00.001Z') })),
+    ), snapshot(
+      doc('now-t0', origin({ lat: 0, lng: 0, timestamp: at('2026-09-28T00:00:00.000Z') })),
+      doc('future-t0', origin({ lat: 1, lng: 1, timestamp: at('2026-09-28T00:00:00.001Z') })),
+    ));
+    expect(result.emergencies).toHaveLength(2);
+    expect(result.activeEmergencies.map((item) => item.id)).toEqual(['now-t0']);
+    expect(result.metrics.futureDatedEmergencies).toBe(1);
+    expect(result.metrics.activeT0).toBe(1);
+    expect(result.metrics.latestTiers).toEqual({ T1: 0, T2: 1, T3: 0 });
+    expect(result.geospatial).toMatchObject([{ key: '0,0', T0: 1, T2: 1 }]);
+    expect(result.srqTrend).toMatchObject([{ date: '2026-09-28', T1: 0, T2: 1, T3: 0 }]);
+  });
+  it('keeps completed referral, downgrade, legacy, malformed origin and workflow out of modern points', () => {
+    const result = model(snapshot(doc('legacy', { zona: 'merah' }), doc('bad-case', { recordType: 'srq20' })), snapshot(
+      doc('completed', origin({ lat: 1, lng: 1, validation: validation('t0-confirmed'), referral: referral('completed') })),
+      doc('downgrade', origin({ lat: 2, lng: 2, validation: validation('downgraded', { downgradedTo: 'T1' }) })),
+      doc('workflow-issue', origin({ lat: 3, lng: 3, validation: { outcome: 'bad' } })),
+      doc('bad-origin', origin({ gates: ['wrong'] })),
+      doc('good', origin({ lat: 4, lng: 4 })),
+    ));
+    expect(result.geospatial.map((point) => point.key)).toEqual(['4,4']);
+    expect(result.metrics).toMatchObject({ activeT0: 1, workflowIssues: 1, rejectedCases: 1, rejectedEmergencies: 1, downgraded: { T1: 1, T2: 0 }, legacy: { merah: 1, kuning: 0, hijau: 0 }, latestTiers: { T1: 0, T2: 0, T3: 0 } });
+    expect(result.emergencies.find((item) => item.id === 'workflow-issue').origin.status).toBe('t0-suspect');
+  });
+  it('counts each persisted historical SRQ event in the exact rolling window, unlike current patient distribution', () => {
+    const result = model(snapshot(
+      doc('older', srq({ timestamp: at('2026-08-28T23:59:59.999Z'), tier: 'T1' })),
+      doc('lower', srq({ timestamp: at('2026-08-29T00:00:00.000Z'), tier: 'T1' })),
+      doc('repeat', srq({ timestamp: at('2026-09-27T00:00:00Z'), tier: 'T2' })),
+      doc('upper', srq({ timestamp: at('2026-09-28T00:00:00.000Z'), tier: 'T3' })),
+      doc('future', srq({ timestamp: at('2026-09-28T00:00:00.001Z'), tier: 'T1' })),
+    ));
+    expect(result.metrics.latestTiers).toEqual({ T1: 0, T2: 0, T3: 1 });
+    expect(result.metrics.windowSrq).toBe(3);
+    expect(result.srqTrend).toEqual([
+      { date: '2026-08-29', T1: 1, T2: 0, T3: 0 },
+      { date: '2026-09-27', T1: 0, T2: 1, T3: 0 },
+      { date: '2026-09-28', T1: 0, T2: 0, T3: 1 },
+    ]);
+  });
+});

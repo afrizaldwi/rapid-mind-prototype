@@ -142,9 +142,31 @@ export function buildAdminReadModel(casesData, emergencyData, now) {
   const latestTiers = { T1: 0, T2: 0, T3: 0 };
   for (const patient of patients) if (patient.latestSrq) latestTiers[patient.latestSrq.tier]++;
   const windowCases = cases.filter((item) => item.timestamp && Date.parse(item.timestamp) >= cutoff && Date.parse(item.timestamp) <= referenceTime);
-  const activeEmergencies = emergencies.filter((item) => item.active);
+  const activeEmergencies = emergencies.filter((item) => item.active && item.timestamp && Date.parse(item.timestamp) <= referenceTime);
+  const currentSrq = patients.map((patient) => patient.latestSrq).filter(Boolean);
+  const buckets = new Map();
+  const addPoint = (coordinates, label, tier) => {
+    if (!coordinates) return;
+    const key = `${coordinates.lat},${coordinates.lng}`;
+    if (!buckets.has(key)) buckets.set(key, { key, coordinates, labels: new Set(), T0: 0, T1: 0, T2: 0, T3: 0 });
+    const bucket = buckets.get(key);
+    if (label) bucket.labels.add(label);
+    bucket[tier]++;
+  };
+  for (const item of currentSrq) addPoint(item.coordinates, item.poskoName, item.tier);
+  for (const item of activeEmergencies) addPoint(item.coordinates, item.origin.poskoName, 'T0');
+  const geospatial = [...buckets.values()].sort((a, b) => a.coordinates.lat - b.coordinates.lat || a.coordinates.lng - b.coordinates.lng)
+    .map((bucket) => ({ ...bucket, labels: [...bucket.labels].sort() }));
+  const trendByDate = new Map();
+  for (const item of windowCases) {
+    if (item.type !== 'srq20') continue;
+    const date = item.timestamp.slice(0, 10);
+    if (!trendByDate.has(date)) trendByDate.set(date, { date, T1: 0, T2: 0, T3: 0 });
+    trendByDate.get(date)[item.tier]++;
+  }
+  const srqTrend = [...trendByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   return {
-    cases, emergencies, patients, activeEmergencies, reference, windowStart: new Date(cutoff).toISOString(),
+    cases, emergencies, patients, activeEmergencies, geospatial, srqTrend, reference, windowStart: new Date(cutoff).toISOString(),
     metrics: {
       trackedPatients: patients.length,
       pfaRecords: cases.filter((item) => item.type === 'pfa').length,
@@ -163,6 +185,9 @@ export function buildAdminReadModel(casesData, emergencyData, now) {
       rejectedEmergencies: emergencyData?.rejected?.length || 0,
       undatedCases: cases.filter((item) => !item.timestamp).length,
       futureDatedCases: cases.filter((item) => item.timestamp && Date.parse(item.timestamp) > referenceTime).length,
+      futureDatedEmergencies: emergencies.filter((item) => item.timestamp && Date.parse(item.timestamp) > referenceTime).length,
+      currentSrqWithoutCoordinates: currentSrq.filter((item) => !item.coordinates).length,
+      activeT0WithoutCoordinates: activeEmergencies.filter((item) => !item.coordinates).length,
     },
   };
 }
