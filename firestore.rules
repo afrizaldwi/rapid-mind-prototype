@@ -24,6 +24,12 @@ service cloud.firestore {
       return value is string && value.matches('^[0-9]{16}$');
     }
 
+    function validOrganizationId(value) {
+      return nonblank(value) && value == value.trim() && value.size() <= 1500 &&
+        value != '.' && value != '..' && !value.matches('^__.*') &&
+        value.matches('^[^/]+$');
+    }
+
     function optionalText(data, key) {
       return !(key in data) || nonblank(data[key]);
     }
@@ -219,24 +225,83 @@ service cloud.firestore {
          data.uploadedBy == request.auth.uid);
     }
 
+    function validOrganization(data) {
+      return data.keys().hasAll([
+        'schemaVersion', 'name', 'type', 'operationalStatus', 't0ReferralEligible',
+        'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+      ]) && data.keys().hasOnly([
+        'schemaVersion', 'name', 'type', 'operationalStatus', 't0ReferralEligible',
+        'address', 'lat', 'lng', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+      ]) && data.schemaVersion == 'healthcare-organization-v1' &&
+        nonblank(data.name) && data.name == data.name.trim() &&
+        data.type == 'hospital' &&
+        data.operationalStatus in ['active', 'inactive'] &&
+        data.t0ReferralEligible is bool && optionalText(data, 'address') &&
+        (!('address' in data) || data.address == data.address.trim()) &&
+        validCoordinates(data) && data.createdAt is timestamp &&
+        data.updatedAt is timestamp && nonblank(data.createdBy) &&
+        nonblank(data.updatedBy);
+    }
+
+    function validNewProfileBase(data, uid) {
+      return data.uid == uid && nonblank(data.name) && data.name == data.name.trim() &&
+        nonblank(data.email) && data.email == data.email.trim() &&
+        data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$') &&
+        nonblank(data.createdAt);
+    }
+
+    function validNewRelawanProfile(data, uid) {
+      return data.keys().hasAll([
+          'uid', 'email', 'name', 'role', 'poskoName', 'poskoLat', 'poskoLng', 'createdAt'
+        ]) && data.keys().hasOnly([
+          'uid', 'email', 'name', 'role', 'poskoName', 'poskoLat', 'poskoLng', 'createdAt'
+        ]) && validNewProfileBase(data, uid) && data.role == 'relawan' &&
+        nonblank(data.poskoName) && data.poskoName == data.poskoName.trim() &&
+        data.poskoLat is number && data.poskoLat >= -90 && data.poskoLat <= 90 &&
+        data.poskoLng is number && data.poskoLng >= -180 && data.poskoLng <= 180;
+    }
+
+    function validNewNakesProfile(data, uid) {
+      return data.keys().hasAll(['uid', 'email', 'name', 'role', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'name', 'role', 'createdAt', 'organizationId']) &&
+        validNewProfileBase(data, uid) && data.role == 'nakes' &&
+        (!('organizationId' in data) ||
+          (validOrganizationId(data.organizationId) &&
+           exists(/databases/$(database)/documents/healthcareOrganizations/$(data.organizationId)) &&
+           get(/databases/$(database)/documents/healthcareOrganizations/$(data.organizationId)).data.type == 'hospital'));
+    }
+
+    match /healthcareOrganizations/{organizationId} {
+      allow get, list: if isAdmin() || isNakes();
+      allow create: if isAdmin() && validOrganization(request.resource.data) &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.updatedBy == request.auth.uid &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin() && validOrganization(resource.data) &&
+        validOrganization(request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'address', 'lat', 'lng', 'operationalStatus',
+          't0ReferralEligible', 'updatedAt', 'updatedBy'
+        ]) && request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.updatedBy == request.auth.uid;
+    }
+
     match /users/{uid} {
-      allow get: if signedIn() && request.auth.uid == uid;
-      allow create: if signedIn() && request.auth.uid == uid &&
-        request.auth.token.email is string &&
-        request.resource.data.keys().hasAll([
-          'uid', 'email', 'name', 'role', 'poskoName', 'poskoLat', 'poskoLng', 'createdAt'
-        ]) && request.resource.data.keys().hasOnly([
-          'uid', 'email', 'name', 'role', 'poskoName', 'poskoLat', 'poskoLng', 'createdAt'
-        ]) && request.resource.data.uid == uid &&
-        request.resource.data.role == 'relawan' &&
-        request.resource.data.email == request.auth.token.email &&
-        nonblank(request.resource.data.name) &&
-        nonblank(request.resource.data.poskoName) &&
-        request.resource.data.poskoLat is number &&
-        request.resource.data.poskoLat >= -90 && request.resource.data.poskoLat <= 90 &&
-        request.resource.data.poskoLng is number &&
-        request.resource.data.poskoLng >= -180 && request.resource.data.poskoLng <= 180 &&
-        nonblank(request.resource.data.createdAt);
+      allow get: if (signedIn() && request.auth.uid == uid) ||
+        (isAdmin() && resource.data.role == 'nakes');
+      allow create: if isAdmin() &&
+        (validNewRelawanProfile(request.resource.data, uid) ||
+         validNewNakesProfile(request.resource.data, uid));
+      allow update: if isAdmin() && resource.data.role == 'nakes' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['organizationId']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['organizationId']) &&
+        (!('organizationId' in request.resource.data) ||
+          (validOrganizationId(request.resource.data.organizationId) &&
+           exists(/databases/$(database)/documents/healthcareOrganizations/$(request.resource.data.organizationId)) &&
+           get(/databases/$(database)/documents/healthcareOrganizations/$(request.resource.data.organizationId)).data.type == 'hospital'));
     }
 
     match /patients/{patientNik} {

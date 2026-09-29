@@ -2,10 +2,9 @@ import { createContext, useState, useEffect, useCallback, useRef } from "react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { doc, setDoc, getDocFromCache, getDocFromServer } from "firebase/firestore";
+import { doc, getDocFromCache, getDocFromServer } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { getHomeRouteForRole } from "../lib/authRoles";
 
@@ -95,23 +94,6 @@ export function AuthProvider({ children }) {
     return signInWithEmailAndPassword(auth, email, password);
   };
 
-  const register = async (email, password, profileData) => {
-    const result = await createUserWithEmailAndPassword(auth, email, password);
-    if (!result.user.email) throw new Error("Email akun Firebase tidak tersedia.");
-    // Simpan profil ke Firestore
-    const profile = {
-      ...profileData,
-      role: "relawan",
-      email: result.user.email,
-      uid: result.user.uid,
-      createdAt: new Date().toISOString(),
-    };
-    await setDoc(doc(db, "users", result.user.uid), profile);
-    profileRequest.current++;
-    setProfileState({ uid: result.user.uid, status: "ready", profile, issue: null });
-    return result;
-  };
-
   const logout = async () => {
     await signOut(auth);
     profileRequest.current++;
@@ -130,7 +112,6 @@ export function AuthProvider({ children }) {
     profileIssue: profileState.uid === user?.uid ? profileState.issue : null,
     retryProfile: () => auth.currentUser ? loadProfile(auth.currentUser) : Promise.resolve(),
     login,
-    register,
     logout,
     isAuthenticated: !!user,
     isRelawan: userProfile?.role === "relawan",

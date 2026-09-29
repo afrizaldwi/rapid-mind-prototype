@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { Brain, LayoutDashboard, Map, ClipboardList, BarChart3, LogOut, Menu, X } from 'lucide-react'
+import { Brain, LayoutDashboard, Map, ClipboardList, BarChart3, LogOut, Menu, Building2, Users, UserRoundPlus } from 'lucide-react'
 
 export default function AdminLayout() {
   const { userProfile, logout } = useAuth()
@@ -18,6 +18,9 @@ export default function AdminLayout() {
     { to: '/admin/map', icon: Map, label: 'Peta Sebaran' },
     { to: '/admin/cases', icon: ClipboardList, label: 'Daftar Kasus' },
     { to: '/admin/stats', icon: BarChart3, label: 'Statistik' },
+    { to: '/admin/organizations', icon: Building2, label: 'Rumah Sakit' },
+    { to: '/admin/relawan', icon: UserRoundPlus, label: 'Relawan' },
+    { to: '/admin/nakes', icon: Users, label: 'Nakes' },
   ]
 
   return (

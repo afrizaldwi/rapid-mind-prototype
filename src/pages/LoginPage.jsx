@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { getHomeRouteForRole } from '../lib/authRoles'
 import { Brain, LogIn, Mail, Lock, AlertCircle } from 'lucide-react'
@@ -22,7 +22,7 @@ export default function LoginPage() {
     } catch (err) {
       switch (err.code) {
         case 'auth/user-not-found':
-          setError('Akun tidak ditemukan. Silakan daftar terlebih dahulu.')
+          setError('Akun tidak ditemukan. Hubungi administrator/pengelola.')
           break
         case 'auth/wrong-password':
           setError('Password salah. Silakan coba lagi.')
@@ -139,14 +139,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-slate-500">
-              Belum punya akun?{' '}
-              <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
-                Daftar Sekarang
-              </Link>
-            </p>
-          </div>
         </div>
       </div>
     </div>

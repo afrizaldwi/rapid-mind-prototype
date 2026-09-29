@@ -1,12 +1,47 @@
+import { useEffect, useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Brain, ClipboardList, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { db } from '../../lib/firebase';
+import { healthcareOrganizationSchema, membershipStatus } from '../../schemas/healthcareOrganization';
 
 export default function FaskesLayout() {
   const { user, userProfile, logout } = useAuth();
   const isOnline = useOnlineStatus();
   const navigate = useNavigate();
+  const [membership, setMembership] = useState({ status: 'loading', name: null });
+
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    let unsubscribeOrganization = () => {};
+    const unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), (snapshot) => {
+      unsubscribeOrganization();
+      const organizationId = membershipStatus(snapshot.data());
+      if (!organizationId) {
+        setMembership({ status: 'unassigned', name: null });
+        return;
+      }
+      if (organizationId.includes('/')) {
+        setMembership({ status: 'invalid', name: null });
+        return;
+      }
+      setMembership({ status: 'loading', name: null });
+      unsubscribeOrganization = onSnapshot(doc(db, 'healthcareOrganizations', organizationId), (organization) => {
+        if (!organization.exists()) { setMembership({ status: 'missing', name: null }); return; }
+        const parsed = healthcareOrganizationSchema.safeParse(organization.data());
+        setMembership(parsed.success ? { status: 'assigned', name: parsed.data.name } : { status: 'invalid', name: null });
+      }, () => setMembership({ status: 'error', name: null }));
+    }, () => setMembership({ status: 'error', name: null }));
+    return () => { unsubscribeProfile(); unsubscribeOrganization(); };
+  }, [user?.uid]);
+
+  const hospitalLabel = {
+    loading: 'Memuat organisasi...', unassigned: 'Belum ditugaskan ke rumah sakit',
+    missing: 'Rumah sakit terkait tidak ditemukan', invalid: 'Data rumah sakit tidak valid',
+    error: 'Organisasi tidak dapat dimuat',
+  }[membership.status] || membership.name;
 
   const handleLogout = async () => {
     await logout();
@@ -31,7 +66,7 @@ export default function FaskesLayout() {
             </span>
             <div className="max-w-48 text-right">
               <p className="truncate font-semibold text-slate-800" title={userProfile?.name || ''}>{userProfile?.name || 'Nakes'}</p>
-              <p className="truncate text-xs text-slate-500">{userProfile?.poskoName || userProfile?.email || user?.email || 'Akun Faskes'}</p>
+              <p className="truncate text-xs text-slate-500" title={hospitalLabel}>{hospitalLabel}</p>
             </div>
             <button type="button" onClick={handleLogout}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-slate-700 hover:bg-slate-50">

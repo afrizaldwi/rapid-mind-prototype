@@ -11,7 +11,6 @@ import FaskesLayout from './components/layout/FaskesLayout'
 
 // Auth Pages
 import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
 
 // Relawan Pages
 import HomePage from './pages/relawan/HomePage'
@@ -31,6 +30,9 @@ import DashboardPage from './pages/admin/DashboardPage'
 import MapPage from './pages/admin/MapPage'
 import CasesPage from './pages/admin/CasesPage'
 import StatsPage from './pages/admin/StatsPage'
+import OrganizationRegistryPage from './pages/admin/OrganizationRegistryPage'
+import RelawanManagementPage from './pages/admin/RelawanManagementPage'
+import NakesManagementPage from './pages/admin/NakesManagementPage'
 import EmergencyQueuePage from './pages/faskes/EmergencyQueuePage'
 import EmergencyDetailPage from './pages/faskes/EmergencyDetailPage'
 
@@ -40,7 +42,6 @@ function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
 
         {/* Relawan Routes */}
         <Route
@@ -94,6 +95,9 @@ function App() {
           <Route path="map" element={<MapPage />} />
           <Route path="cases" element={<CasesPage />} />
           <Route path="stats" element={<StatsPage />} />
+          <Route path="organizations" element={<OrganizationRegistryPage />} />
+          <Route path="relawan" element={<RelawanManagementPage />} />
+          <Route path="nakes" element={<NakesManagementPage />} />
         </Route>
 
         {/* Default redirect */}
