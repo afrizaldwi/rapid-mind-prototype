@@ -292,16 +292,27 @@ service cloud.firestore {
     match /users/{uid} {
       allow get: if (signedIn() && request.auth.uid == uid) ||
         (isAdmin() && resource.data.role == 'nakes');
+      // A users query must constrain role == 'relawan'; Rules are not filters.
+      allow list: if isAdmin() && resource.data.role == 'relawan';
       allow create: if isAdmin() &&
         (validNewRelawanProfile(request.resource.data, uid) ||
          validNewNakesProfile(request.resource.data, uid));
-      allow update: if isAdmin() && resource.data.role == 'nakes' &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['organizationId']) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasAny(['organizationId']) &&
-        (!('organizationId' in request.resource.data) ||
-          (validOrganizationId(request.resource.data.organizationId) &&
-           exists(/databases/$(database)/documents/healthcareOrganizations/$(request.resource.data.organizationId)) &&
-           get(/databases/$(database)/documents/healthcareOrganizations/$(request.resource.data.organizationId)).data.type == 'hospital'));
+      allow update: if isAdmin() &&
+        ((resource.data.role == 'nakes' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['organizationId']) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasAny(['organizationId']) &&
+          (!('organizationId' in request.resource.data) ||
+            (validOrganizationId(request.resource.data.organizationId) &&
+             exists(/databases/$(database)/documents/healthcareOrganizations/$(request.resource.data.organizationId)) &&
+             get(/databases/$(database)/documents/healthcareOrganizations/$(request.resource.data.organizationId)).data.type == 'hospital'))) ||
+         (resource.data.role == 'relawan' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['poskoName', 'poskoLat', 'poskoLng']) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasAll(['poskoName', 'poskoLat', 'poskoLng']) &&
+          nonblank(request.resource.data.poskoName) &&
+          request.resource.data.poskoLat is number &&
+          request.resource.data.poskoLat >= -90 && request.resource.data.poskoLat <= 90 &&
+          request.resource.data.poskoLng is number &&
+          request.resource.data.poskoLng >= -180 && request.resource.data.poskoLng <= 180));
     }
 
     match /patients/{patientNik} {
