@@ -12,7 +12,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 vi.mock('../src/lib/firebase', () => ({ auth: mocks.auth, db: {} }));
 
-import { assignmentPatch, projectRelawan, projectRelawanRoster, reassignRelawan, rosterIsCurrent, watchRelawan } from '../src/lib/relawanManagement.js';
+import { assignmentPatch, operationalRosterIsCurrent, projectRelawan, projectRelawanRoster, reassignRelawan, rosterIsCurrent, watchRelawan } from '../src/lib/relawanManagement.js';
 
 const profile = (uid, name, role = 'relawan') => ({ uid, name, email: `${uid}@example.org`, role,
   poskoName: DEMO_POSKOS[0].name, poskoLat: DEMO_POSKOS[0].lat, poskoLng: DEMO_POSKOS[0].lng,
@@ -45,6 +45,15 @@ describe('Relawan roster domain', () => {
     expect(rosterIsCurrent({ fromCache: true, pending: false }, true)).toBe(false);
     expect(rosterIsCurrent({ fromCache: false, pending: true }, true)).toBe(false);
     expect(rosterIsCurrent({ fromCache: false, pending: false }, false)).toBe(false);
+  });
+  it('does not expose an operational roster count until the listener is ready and server-confirmed', () => {
+    const ready = { status: 'ready', data: { relawan: [], fromCache: false, pending: false } };
+    expect(operationalRosterIsCurrent(ready, true)).toBe(true);
+    expect(operationalRosterIsCurrent({ ...ready, status: 'loading' }, true)).toBe(false);
+    expect(operationalRosterIsCurrent({ ...ready, status: 'error' }, true)).toBe(false);
+    expect(operationalRosterIsCurrent({ ...ready, data: { ...ready.data, fromCache: true } }, true)).toBe(false);
+    expect(operationalRosterIsCurrent({ ...ready, data: { ...ready.data, pending: true } }, true)).toBe(false);
+    expect(operationalRosterIsCurrent(ready, false)).toBe(false);
   });
   it('subscribes only to role-constrained profiles and passes metadata', () => {
     mocks.onSnapshot.mockImplementationOnce((_query, _options, callback) => {

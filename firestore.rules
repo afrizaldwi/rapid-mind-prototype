@@ -30,6 +30,27 @@ service cloud.firestore {
         value.matches('^[^/]+$');
     }
 
+    function canonicalResourcePosko(id, name) {
+      return (id == 'posko-utama-kota' && name == 'Posko Utama - Kota') ||
+        (id == 'posko-barat-tangerang' && name == 'Posko Barat - Tangerang') ||
+        (id == 'posko-timur-bekasi' && name == 'Posko Timur - Bekasi') ||
+        (id == 'posko-selatan-depok' && name == 'Posko Selatan - Depok') ||
+        (id == 'posko-utara-tangerang-selatan' && name == 'Posko Utara - Tangerang Selatan');
+    }
+
+    function validPoskoResource(data, poskoId) {
+      return data.keys().hasAll(['schemaVersion', 'poskoId', 'poskoName',
+          'medicinePackages', 'medicalKits', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy']) &&
+        data.keys().hasOnly(['schemaVersion', 'poskoId', 'poskoName',
+          'medicinePackages', 'medicalKits', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy']) &&
+        data.schemaVersion == 'posko-resource-allocation-v1' && data.poskoId == poskoId &&
+        canonicalResourcePosko(data.poskoId, data.poskoName) &&
+        data.medicinePackages is int && data.medicinePackages >= 0 &&
+        data.medicalKits is int && data.medicalKits >= 0 &&
+        data.createdAt is timestamp && nonblank(data.createdBy) &&
+        data.updatedAt is timestamp && nonblank(data.updatedBy);
+    }
+
     function optionalText(data, key) {
       return !(key in data) || nonblank(data[key]);
     }
@@ -284,6 +305,26 @@ service cloud.firestore {
           'name', 'address', 'lat', 'lng', 'operationalStatus',
           't0ReferralEligible', 'updatedAt', 'updatedBy'
         ]) && request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    match /poskoResources/{poskoId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin() && validPoskoResource(request.resource.data, poskoId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.updatedBy == request.auth.uid;
+      allow update: if isAdmin() && validPoskoResource(resource.data, poskoId) &&
+        validPoskoResource(request.resource.data, poskoId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'medicinePackages', 'medicalKits', 'updatedAt', 'updatedBy']) &&
+        request.resource.data.schemaVersion == resource.data.schemaVersion &&
+        request.resource.data.poskoId == resource.data.poskoId &&
+        request.resource.data.poskoName == resource.data.poskoName &&
+        request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.createdBy == resource.data.createdBy &&
         request.resource.data.updatedAt == request.time &&
         request.resource.data.updatedBy == request.auth.uid;

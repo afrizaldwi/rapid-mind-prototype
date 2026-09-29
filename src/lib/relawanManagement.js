@@ -30,6 +30,10 @@ export function rosterIsCurrent(roster, online) {
   return !!online && !!roster && !roster.fromCache && !roster.pending;
 }
 
+export function operationalRosterIsCurrent(stream, online) {
+  return stream?.status === 'ready' && rosterIsCurrent(stream.data, online);
+}
+
 export function assignmentPatch(poskoName) {
   const posko = DEMO_POSKOS.find((item) => item.name === poskoName);
   if (!posko) throw new Error('Pilih Posko prototipe yang tersedia.');

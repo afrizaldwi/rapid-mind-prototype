@@ -33,6 +33,7 @@ import StatsPage from './pages/admin/StatsPage'
 import OrganizationRegistryPage from './pages/admin/OrganizationRegistryPage'
 import RelawanManagementPage from './pages/admin/RelawanManagementPage'
 import NakesManagementPage from './pages/admin/NakesManagementPage'
+import ResourcesPage from './pages/admin/ResourcesPage'
 import EmergencyQueuePage from './pages/faskes/EmergencyQueuePage'
 import EmergencyDetailPage from './pages/faskes/EmergencyDetailPage'
 
@@ -98,6 +99,7 @@ function App() {
           <Route path="organizations" element={<OrganizationRegistryPage />} />
           <Route path="relawan" element={<RelawanManagementPage />} />
           <Route path="nakes" element={<NakesManagementPage />} />
+          <Route path="resources" element={<ResourcesPage />} />
         </Route>
 
         {/* Default redirect */}
